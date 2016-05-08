@@ -16,27 +16,21 @@ func init() {
 func handler(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 	client := urlfetch.Client(ctx)
-	resp, err := client.Get("http://eikaiwa.dmm.com/teacher/index/1250/")
+	resp, err := client.Get("http://eikaiwa.dmm.com/teacher/index/10439/")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-//	fmt.Fprintf(w, "HTTP GET returned status %v", resp.Status)
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
-	// TODO 詳細化
+	// get all schedule
 	doc.Find(".oneday").Each(func(_ int, s *goquery.Selection) {
-//		url, _ := s.Text()
-		fmt.Fprintln(w, s.Text())
+		date := s.Find(".date").Text() // 受講可能日
+		fmt.Fprintln(w, date)
+		s.Find(".bt-open").Each(func(_ int, s2 *goquery.Selection) {
+			fmt.Fprint(w, s2.Text())
+			value, _ := s2.Parent().Attr("class") // 予約可能時間
+			fmt.Fprintln(w, value)
+		})
 	})
-
-	// こいつはうまく動いたのでコンテンツの取得自体はうまくいってる
-	//response, err := ioutil.ReadAll(resp.Body)
-	//resp.Body.Close()
-	//if err != nil {
-	//	http.Error(w, err.Error(), http.StatusInternalServerError)
-	//	return
-	//}
-	//fmt.Fprintf(w, "HTTP GET from API call returned: %s", string(response))
-
 }
