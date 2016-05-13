@@ -47,32 +47,47 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		s.Find(".bt-open").Each(func(_ int, s2 *goquery.Selection) {
 
 			s3, _ := s2.Attr("id") // 受講可能時刻
-			fmt.Fprintln(w, s3)
+			//fmt.Fprintln(w, s3)
 			dateString := re.FindString(s3)
-//			fmt.Fprintln(w, dateString)
+			//fmt.Fprintln(w, dateString)
 
-			const form = "2006-01-02 15:04:06 MST"
-			day, _ := time.Parse(form, dateString + " JST")
+			const form = "2006-01-02 15:04:06"
+			//day, _ := time.Parse(form, dateString + " JST")
+			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
+//			day = day.In(time.FixedZone("Asia/Tokyo", 9*60*60))
 			fmt.Fprintln(w, day)
 
 			available = append(available, day)
 		})
-		// キーでデータ作ってデータベースに格納してみる
-		// とりあえず、対象教師のIDをstringIDに放り込んでみる
-		key := datastore.NewKey(ctx, "Schedule", "10439", 0, nil)
+	})
 
-		schedule := Schedule {
-			"10439",
-			available,
-		}
+	// キーでデータ作ってデータベースに格納してみる
+	// とりあえず、対象教師のIDをstringIDに放り込んでみる
+	key := datastore.NewKey(ctx, "Schedule", "10439", 0, nil)
 
-		if _, err := datastore.Put(ctx, key, &schedule); err != nil {
+	var old Schedule
+	if err := datastore.Get(ctx, key, &old); err != nil {
+		// Entityが空の場合は見逃す
+		if err.Error() != "datastore: no such entity" {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
 
-		// 今のTODOが片付いたら次にやること
-		// まず最初にデータを取得して、前回との差分だけを抽出するロジックを作成する
+	fmt.Fprintln(w, old)
 
-	})
+
+	schedule := Schedule {
+		"10439",
+		available,
+	}
+
+	if _, err := datastore.Put(ctx, key, &schedule); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 今のTODOが片付いたら次にやること
+	// まず最初にデータを取得して、前回との差分だけを抽出するロジックを作成する
+
 }
