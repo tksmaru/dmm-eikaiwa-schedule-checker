@@ -1,0 +1,4 @@
+cron:
+- description: check schedule every 30 mins
+  url: /
+  schedule: every 5 minutes
