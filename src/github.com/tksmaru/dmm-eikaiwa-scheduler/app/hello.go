@@ -10,11 +10,19 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
 	"google.golang.org/appengine/datastore"
+	//"google.golang.org/appengine/mail"
+	//"google.golang.org/appengine/log"
 )
 
 type Schedule struct {
 	Teacher  string      // 先生のID
 	Date     []time.Time // 予約可能日時
+	Updated  time.Time
+}
+
+type Notification struct {
+	Date     time.Time
+	New      bool
 }
 
 func init() {
@@ -74,20 +82,42 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Fprintln(w, old)
-
-
-	schedule := Schedule {
+	new := Schedule {
 		"10439",
 		available,
+		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
 
-	if _, err := datastore.Put(ctx, key, &schedule); err != nil {
+	if _, err := datastore.Put(ctx, key, &new); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 今のTODOが片付いたら次にやること
-	// まず最初にデータを取得して、前回との差分だけを抽出するロジックを作成する
+	notifications := []Notification{}
+	for _, newVal := range available {
+		noti := Notification {
+			newVal,
+			true,
+		}
+		// 新規通知かどうか検証
+		for _, oldVal := range old.Date {
+			if newVal.Equal(oldVal) {
+				noti.New = false
+				break
+			}
+		}
+		notifications = append(notifications, noti)
+	}
+	fmt.Fprintln(w, notifications)
 
+	// メールじゃつまらんかな
+	//msg := &mail.Message{
+	//	Sender:  "Example.com Support <support@example.com>",
+	//	To:      []string{"tksmaru@gmail.com"},
+	//	Subject: "Confirm your registration",
+	//	Body:    "test",
+	//}
+	//if err := mail.Send(ctx, msg); err != nil {
+	//	log.Errorf(ctx, "Couldn't send email: %v", err)
+	//}
 }
