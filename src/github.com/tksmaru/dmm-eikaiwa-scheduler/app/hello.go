@@ -9,7 +9,13 @@ import (
 
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
+	"google.golang.org/appengine/datastore"
 )
+
+type Schedule struct {
+	Teacher  string      // 先生のID
+	Date     []time.Time // 予約可能日時
+}
 
 func init() {
 	http.HandleFunc("/", handler)
@@ -27,10 +33,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// yyyy-mm-dd HH:MM:ss
 	re := regexp.MustCompile("[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[03]0:00")
 
+	available := []time.Time{}
+
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	// get all schedule
 	doc.Find(".oneday").Each(func(_ int, s *goquery.Selection) {
+		// TODO 直近の3日分のデータがあれば十分
 
+		// TODO 受講日情報要らない予感
 		date := s.Find(".date").Text() // 受講日
 		fmt.Fprintln(w, date)
 
@@ -39,12 +49,30 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			s3, _ := s2.Attr("id") // 受講可能時刻
 			fmt.Fprintln(w, s3)
 			dateString := re.FindString(s3)
-			fmt.Fprintln(w, dateString)
+//			fmt.Fprintln(w, dateString)
 
 			const form = "2006-01-02 15:04:06 MST"
 			day, _ := time.Parse(form, dateString + " JST")
 			fmt.Fprintln(w, day)
 
+			available = append(available, day)
 		})
+		// キーでデータ作ってデータベースに格納してみる
+		// とりあえず、対象教師のIDをstringIDに放り込んでみる
+		key := datastore.NewKey(ctx, "Schedule", "10439", 0, nil)
+
+		schedule := Schedule {
+			"10439",
+			available,
+		}
+
+		if _, err := datastore.Put(ctx, key, &schedule); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 今のTODOが片付いたら次にやること
+		// まず最初にデータを取得して、前回との差分だけを抽出するロジックを作成する
+
 	})
 }
