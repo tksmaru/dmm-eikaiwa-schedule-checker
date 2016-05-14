@@ -59,7 +59,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			dateString := re.FindString(s3)
 			//fmt.Fprintln(w, dateString)
 
-			const form = "2006-01-02 15:04:06"
+			const form = "2006-01-02 15:04:05"
 			//day, _ := time.Parse(form, dateString + " JST")
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
 //			day = day.In(time.FixedZone("Asia/Tokyo", 9*60*60))
