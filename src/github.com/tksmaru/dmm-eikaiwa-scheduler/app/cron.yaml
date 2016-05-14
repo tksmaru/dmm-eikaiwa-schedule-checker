@@ -1,4 +1,4 @@
 cron:
 - description: check schedule
   url: /check
-  schedule: every 2 hours from 6:00 to 23:00
+  schedule: every 2 hours from 06:00 to 23:00
