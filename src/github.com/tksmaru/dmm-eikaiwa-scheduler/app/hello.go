@@ -26,7 +26,7 @@ type Notification struct {
 }
 
 func init() {
-	http.HandleFunc("/", handler)
+	http.HandleFunc("/check", handler)
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
