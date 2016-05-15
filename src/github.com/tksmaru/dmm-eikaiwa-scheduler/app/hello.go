@@ -55,20 +55,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		// TODO 受講日情報要らない予感
 		date := s.Find(".date").Text() // 受講日
 		log.Debugf(ctx, "-----%v-----", date)
-//		fmt.Fprintln(w, date)
 
 		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
 			s2, _ := s.Attr("id") // 受講可能時刻
 			log.Debugf(ctx, "%v", s2)
-			//fmt.Fprintln(w, s3)
 			dateString := re.FindString(s2)
 			log.Debugf(ctx, "%v", dateString)
-			//fmt.Fprintln(w, dateString)
 
 			const form = "2006-01-02 15:04:05"
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
-			//fmt.Fprintln(w, day)
 			log.Debugf(ctx, "%v", day)
 
 			available = append(available, day)
