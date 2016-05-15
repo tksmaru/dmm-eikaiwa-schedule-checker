@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"net/http"
 	"regexp"
 	"time"
@@ -45,28 +44,36 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	// get all schedule
-	doc.Find(".oneday").Each(func(_ int, s *goquery.Selection) {
-		// TODO 直近の3日分のデータがあれば十分
+
+	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		// 直近の3日分の予約可能情報を対象とする
+		log.Debugf(ctx, "i = %v", i)
+		if i >= 3 {
+			return false
+		}
 
 		// TODO 受講日情報要らない予感
 		date := s.Find(".date").Text() // 受講日
-		fmt.Fprintln(w, date)
+		log.Debugf(ctx, "-----%v-----", date)
+//		fmt.Fprintln(w, date)
 
-		s.Find(".bt-open").Each(func(_ int, s2 *goquery.Selection) {
+		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
-			s3, _ := s2.Attr("id") // 受講可能時刻
+			s2, _ := s.Attr("id") // 受講可能時刻
+			log.Debugf(ctx, "%v", s2)
 			//fmt.Fprintln(w, s3)
-			dateString := re.FindString(s3)
+			dateString := re.FindString(s2)
+			log.Debugf(ctx, "%v", dateString)
 			//fmt.Fprintln(w, dateString)
 
 			const form = "2006-01-02 15:04:05"
-			//day, _ := time.Parse(form, dateString + " JST")
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
-//			day = day.In(time.FixedZone("Asia/Tokyo", 9*60*60))
-			fmt.Fprintln(w, day)
+			//fmt.Fprintln(w, day)
+			log.Debugf(ctx, "%v", day)
 
 			available = append(available, day)
 		})
+		return true
 	})
 
 	// キーでデータ作ってデータベースに格納してみる
@@ -108,7 +115,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 		notifications = append(notifications, noti)
 	}
-	fmt.Fprintln(w, notifications)
 
 	// メールじゃつまらんかな
 	//msg := &mail.Message{
@@ -120,4 +126,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	//if err := mail.Send(ctx, msg); err != nil {
 	//	log.Errorf(ctx, "Couldn't send email: %v", err)
 	//}
+	//fmt.Fprintln(w, notifications)
+	log.Debugf(ctx, "%v", notifications)
 }
