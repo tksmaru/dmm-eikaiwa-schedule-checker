@@ -33,9 +33,16 @@ func init() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+
 	ctx := appengine.NewContext(r)
+	teacher := os.Getenv("teacher")
+	if teacher == "" {
+		log.Debugf(ctx, "invalid teacher id: %v", teacher)
+		return
+	}
+
 	client := urlfetch.Client(ctx)
-	resp, err := client.Get("http://eikaiwa.dmm.com/teacher/index/10439/")
+	resp, err := client.Get("http://eikaiwa.dmm.com/teacher/index/" + teacher + "/")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -78,7 +85,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	// キーでデータ作ってデータベースに格納してみる
 	// とりあえず、対象教師のIDをstringIDに放り込んでみる
-	key := datastore.NewKey(ctx, "Schedule", "10439", 0, nil)
+	key := datastore.NewKey(ctx, "Schedule", teacher, 0, nil)
 
 	var old Schedule
 	if err := datastore.Get(ctx, key, &old); err != nil {
@@ -90,7 +97,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	new := Schedule {
-		"10439",
+		teacher,
 		available,
 		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
@@ -124,7 +131,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		values.Add("token", token)
 		values.Add("channel", "#general")
 		values.Add("as_user", "true")
-		values.Add("text", "testtest")
+		values.Add("text", "testtest" + teacher)
 
 		res, error := client.PostForm("https://slack.com/api/chat.postMessage", values)
 		if error != nil {
@@ -139,25 +146,5 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			log.Debugf(ctx, "response: %v", string(b))
 		}
 	}
-
-
-////	 メールじゃつまらんかな
-//
-//	sender := os.Getenv("mail_sender")
-//	log.Debugf(ctx, "%v", sender)
-//	to := os.Getenv("to")
-//	log.Debugf(ctx, "%v", to)
-//
-//	if sender != "" && to != "" {
-//		msg := &mail.Message{
-//			Sender:  fmt.Sprintf("DMM Eikaiwa Schedule Cheaker <%s>",sender),
-//			To:      []string{to},
-//			Subject: "teachers schedule",
-//			Body:    fmt.Sprintf(Template, "template test"),
-//		}
-//		if err := mail.Send(ctx, msg); err != nil {
-//			log.Errorf(ctx, "Couldn't send email: %v", err)
-//		}
-//	}
 }
 
