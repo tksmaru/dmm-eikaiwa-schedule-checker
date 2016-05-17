@@ -2,6 +2,7 @@ package app
 
 import (
 	//"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -131,9 +132,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		//log.Debugf(ctx, "debugres %v", res)
-		res.Body.Close()
+		defer res.Body.Close()
 
+		b, err := ioutil.ReadAll(res.Body)
+		if err == nil {
+			log.Debugf(ctx, "response: %v", string(b))
+		}
 	}
 
 
