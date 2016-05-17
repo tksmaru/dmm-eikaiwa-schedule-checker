@@ -1,7 +1,10 @@
 package app
 
 import (
+	//"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"regexp"
 	"time"
 	"github.com/PuerkitoBio/goquery"
@@ -10,7 +13,7 @@ import (
 	"google.golang.org/appengine/urlfetch"
 	"google.golang.org/appengine/datastore"
 	//"google.golang.org/appengine/mail"
-	//"google.golang.org/appengine/log"
+	"google.golang.org/appengine/log"
 )
 
 type Schedule struct {
@@ -111,17 +114,46 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 		notifications = append(notifications, noti)
 	}
-
-	// メールじゃつまらんかな
-	//msg := &mail.Message{
-	//	Sender:  "Example.com Support <support@example.com>",
-	//	To:      []string{"tksmaru@gmail.com"},
-	//	Subject: "Confirm your registration",
-	//	Body:    "test",
-	//}
-	//if err := mail.Send(ctx, msg); err != nil {
-	//	log.Errorf(ctx, "Couldn't send email: %v", err)
-	//}
-	//fmt.Fprintln(w, notifications)
 	log.Debugf(ctx, "%v", notifications)
+
+
+	token := os.Getenv("slack_token")
+	if token != "" {
+		values := url.Values{}
+		values.Add("token", token)
+		values.Add("channel", "#general")
+		values.Add("as_user", "true")
+		values.Add("text", "testtest")
+
+		res, error := client.PostForm("https://slack.com/api/chat.postMessage", values)
+		if error != nil {
+			log.Debugf(ctx, "senderror %v", error)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		//log.Debugf(ctx, "debugres %v", res)
+		res.Body.Close()
+
+	}
+
+
+////	 メールじゃつまらんかな
+//
+//	sender := os.Getenv("mail_sender")
+//	log.Debugf(ctx, "%v", sender)
+//	to := os.Getenv("to")
+//	log.Debugf(ctx, "%v", to)
+//
+//	if sender != "" && to != "" {
+//		msg := &mail.Message{
+//			Sender:  fmt.Sprintf("DMM Eikaiwa Schedule Cheaker <%s>",sender),
+//			To:      []string{to},
+//			Subject: "teachers schedule",
+//			Body:    fmt.Sprintf(Template, "template test"),
+//		}
+//		if err := mail.Send(ctx, msg); err != nil {
+//			log.Errorf(ctx, "Couldn't send email: %v", err)
+//		}
+//	}
 }
+
