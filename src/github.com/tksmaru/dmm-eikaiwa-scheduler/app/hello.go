@@ -13,7 +13,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
 	"google.golang.org/appengine/datastore"
-	//"google.golang.org/appengine/mail"
 	"google.golang.org/appengine/log"
 )
 
@@ -27,6 +26,8 @@ type Notification struct {
 	Date     time.Time
 	New      bool
 }
+
+const maxDays = 2
 
 func init() {
 	http.HandleFunc("/check", handler)
@@ -57,9 +58,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// get all schedule
 
 	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		// 直近の3日分の予約可能情報を対象とする
+		// 直近のmaxDays日分の予約可能情報を対象とする
 		log.Debugf(ctx, "i = %v", i)
-		if i >= 3 {
+		if i >= maxDays {
 			return false
 		}
 
