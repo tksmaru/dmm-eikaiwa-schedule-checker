@@ -42,7 +42,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := urlfetch.Client(ctx)
-	resp, err := client.Get("http://eikaiwa.dmm.com/teacher/index/" + teacher + "/")
+	site := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
+	resp, err := client.Get(site)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -55,6 +56,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	// get all schedule
+
+	// teacher's name: Second(last) element of document.getElementsByTagName('h1')
+	name := doc.Find("h1").Last().Text()
+	log.Debugf(ctx, "name : %v", name)
+
+	// teacher's image: document.getElementsByClassName('profile-pic')
+	image, _ := doc.Find(".profile-pic").First().Attr("src")
+	log.Debugf(ctx, "image : %v", image)
 
 	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		// 直近のmaxDays日分の予約可能情報を対象とする
@@ -130,8 +139,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		values := url.Values{}
 		values.Add("token", token)
 		values.Add("channel", "#general")
-		values.Add("as_user", "true")
-		values.Add("text", fmt.Sprintf(messageFormat, teacher, strings.Join(notifications, "\n")))
+		values.Add("as_user", "false")
+		values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", name))
+		values.Add("icon_url", image)
+		values.Add("text", fmt.Sprintf(messageFormat, strings.Join(notifications, "\n"), site))
 
 		res, error := client.PostForm("https://slack.com/api/chat.postMessage", values)
 		if error != nil {
@@ -149,6 +160,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 const messageFormat = `
-New date available for teacher %s
+Hi, you can have a lesson below!
 %s
+
+Access to <%s>
 `
