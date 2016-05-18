@@ -1,12 +1,13 @@
 package app
 
 import (
-	//"fmt"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 	"github.com/PuerkitoBio/goquery"
 
@@ -22,12 +23,10 @@ type Schedule struct {
 	Updated  time.Time
 }
 
-type Notification struct {
-	Date     time.Time
-	New      bool
-}
-
-const maxDays = 2
+const (
+	maxDays = 2
+	form = "2006-01-02 15:04:05"
+)
 
 func init() {
 	http.HandleFunc("/check", handler)
@@ -75,7 +74,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			dateString := re.FindString(s2)
 			log.Debugf(ctx, "%v", dateString)
 
-			const form = "2006-01-02 15:04:05"
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
 			log.Debugf(ctx, "%v", day)
 
@@ -108,23 +106,24 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	notifications := []Notification{}
+	notifications := []string{}
 	for _, newVal := range available {
-		noti := Notification {
-			newVal,
-			true,
-		}
-		// 新規通知かどうか検証
+		var notify = true
 		for _, oldVal := range old.Date {
 			if newVal.Equal(oldVal) {
-				noti.New = false
+				notify = false
 				break
 			}
 		}
-		notifications = append(notifications, noti)
+		if notify {
+			notifications = append(notifications, newVal.Format(form))
+		}
 	}
-	log.Debugf(ctx, "%v", notifications)
+	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
 
+	if len(notifications) == 0 {
+		return
+	}
 
 	token := os.Getenv("slack_token")
 	if token != "" {
@@ -132,7 +131,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		values.Add("token", token)
 		values.Add("channel", "#general")
 		values.Add("as_user", "true")
-		values.Add("text", "testtest" + teacher)
+		values.Add("text", fmt.Sprintf(messageFormat, teacher, strings.Join(notifications, "\n")))
 
 		res, error := client.PostForm("https://slack.com/api/chat.postMessage", values)
 		if error != nil {
@@ -149,3 +148,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const messageFormat = `
+New date available for teacher %s
+%s
+`
