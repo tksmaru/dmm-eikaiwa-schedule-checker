@@ -11,6 +11,7 @@ import (
 	"time"
 	"github.com/PuerkitoBio/goquery"
 
+	"golang.org/x/net/context"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
 	"google.golang.org/appengine/datastore"
@@ -35,24 +36,30 @@ func init() {
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := appengine.NewContext(r)
-	teacher := os.Getenv("teacher")
-	if teacher == "" {
-		log.Debugf(ctx, "invalid teacher id: %v", teacher)
+	teach := os.Getenv("teacher")
+	if teach == "" {
+		log.Debugf(ctx, "invalid teacher id: %v", teach)
 		return
 	}
+
+	teachers := strings.Split(teach, ",")
+	log.Debugf(ctx, "teachers: %v", teachers)
+	for _, teacher := range teachers {
+		err := search(ctx, teacher)
+		if err != nil {
+			log.Warningf(ctx, "err: %v", err)
+		}
+	}
+}
+
+func search(ctx context.Context, teacher string) error {
 
 	client := urlfetch.Client(ctx)
 	site := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
 	resp, err := client.Get(site)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("access error: %s, context: %v", site, err)
 	}
-
-	// yyyy-mm-dd HH:MM:ss
-	re := regexp.MustCompile("[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[03]0:00")
-
-	available := []time.Time{}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	// get all schedule
@@ -64,6 +71,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// teacher's image: document.getElementsByClassName('profile-pic')
 	image, _ := doc.Find(".profile-pic").First().Attr("src")
 	log.Debugf(ctx, "image : %v", image)
+
+	available := []time.Time{}
+	// yyyy-mm-dd HH:MM:ss
+	re := regexp.MustCompile("[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[03]0:00")
 
 	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		// 直近のmaxDays日分の予約可能情報を対象とする
@@ -91,16 +102,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return true
 	})
 
-	// キーでデータ作ってデータベースに格納してみる
-	// とりあえず、対象教師のIDをstringIDに放り込んでみる
 	key := datastore.NewKey(ctx, "Schedule", teacher, 0, nil)
 
 	var old Schedule
 	if err := datastore.Get(ctx, key, &old); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return fmt.Errorf("datastore access error: %s, context: %v", teacher, err)
 		}
 	}
 
@@ -111,8 +119,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := datastore.Put(ctx, key, &new); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
 	}
 
 	notifications := []string{}
@@ -131,7 +138,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
 
 	if len(notifications) == 0 {
-		return
+		return nil
 	}
 
 	token := os.Getenv("slack_token")
@@ -144,11 +151,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		values.Add("icon_url", image)
 		values.Add("text", fmt.Sprintf(messageFormat, strings.Join(notifications, "\n"), site))
 
-		res, error := client.PostForm("https://slack.com/api/chat.postMessage", values)
-		if error != nil {
-			log.Debugf(ctx, "senderror %v", error)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
+		if err != nil {
+			log.Debugf(ctx, "senderror %v", err)
+			return fmt.Errorf("noti send error: %s, context: %v", teacher, err)
 		}
 		defer res.Body.Close()
 
@@ -157,6 +163,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			log.Debugf(ctx, "response: %v", string(b))
 		}
 	}
+	return nil
 }
 
 const messageFormat = `
