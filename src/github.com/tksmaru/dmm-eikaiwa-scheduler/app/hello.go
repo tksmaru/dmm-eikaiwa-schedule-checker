@@ -143,9 +143,15 @@ func search(ctx context.Context, teacher string) error {
 
 	token := os.Getenv("slack_token")
 	if token != "" {
+
+		channel := os.Getenv("channel")
+		if channel == "" {
+			channel = "#general"
+		}
+
 		values := url.Values{}
 		values.Add("token", token)
-		values.Add("channel", "#general")
+		values.Add("channel", channel)
 		values.Add("as_user", "false")
 		values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", name))
 		values.Add("icon_url", image)
