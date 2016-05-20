@@ -141,35 +141,74 @@ func search(ctx context.Context, teacher string) error {
 		return nil
 	}
 
-	token := os.Getenv("slack_token")
-	if token != "" {
-
-		channel := os.Getenv("channel")
-		if channel == "" {
-			channel = "#general"
-		}
-
-		values := url.Values{}
-		values.Add("token", token)
-		values.Add("channel", channel)
-		values.Add("as_user", "false")
-		values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", name))
-		values.Add("icon_url", image)
-		values.Add("text", fmt.Sprintf(messageFormat, strings.Join(notifications, "\n"), url))
-
-		res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
-		if err != nil {
-			log.Debugf(ctx, "senderror %v", err)
-			return fmt.Errorf("noti send error: %s, context: %v", teacher, err)
-		}
-		defer res.Body.Close()
-
-		b, err := ioutil.ReadAll(res.Body)
-		if err == nil {
-			log.Debugf(ctx, "response: %v", string(b))
-		}
+	noti := Notification {
+		Name: name,
+		Id: teacher,
+		Page: url,
+		Icon: image,
+		Lessons: notifications,
 	}
+	go notify(ctx, noti)
 	return nil
+}
+
+type Notification struct {
+	Name    string
+	Id      string
+	Page    string
+	Icon    string
+	Lessons []string
+}
+
+func notify(ctx context.Context, noti Notification) {
+	notiType := os.Getenv("notification_type")
+	switch notiType {
+	case "slack":
+		toSlack(ctx, noti)
+	case "mail":
+		toMail(ctx, noti)
+	default:
+		log.Warningf(ctx, "unknown notification type: %v", notiType)
+	}
+}
+
+func toSlack(ctx context.Context, noti Notification) {
+
+	token := os.Getenv("slack_token")
+	if token == "" {
+		log.Warningf(ctx, "Invalid ENV value. slack_token: %v", token)
+		return
+	}
+
+	channel := os.Getenv("channel")
+	if channel == "" {
+		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", token)
+		channel = "#general"
+	}
+
+	values := url.Values{}
+	values.Add("token", token)
+	values.Add("channel", channel)
+	values.Add("as_user", "false")
+	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", noti.Name))
+	values.Add("icon_url", noti.Icon)
+	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(noti.Lessons, "\n"), noti.Page))
+
+	client := urlfetch.Client(ctx)
+	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
+	if err != nil {
+		log.Debugf(ctx, "noti send error: %s, context: %v", noti.Id, err)
+	}
+	defer res.Body.Close()
+
+	b, err := ioutil.ReadAll(res.Body)
+	if err == nil {
+		log.Debugf(ctx, "response: %v", string(b))
+	}
+}
+
+func toMail(ctx context.Context, noti Notification) {
+	// TODO write code
 }
 
 const messageFormat = `
