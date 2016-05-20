@@ -55,10 +55,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func search(ctx context.Context, teacher string) error {
 
 	client := urlfetch.Client(ctx)
-	site := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
-	resp, err := client.Get(site)
+	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
+	resp, err := client.Get(url)
 	if err != nil {
-		return fmt.Errorf("access error: %s, context: %v", site, err)
+		return fmt.Errorf("access error: %s, context: %v", url, err)
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
@@ -155,7 +155,7 @@ func search(ctx context.Context, teacher string) error {
 		values.Add("as_user", "false")
 		values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", name))
 		values.Add("icon_url", image)
-		values.Add("text", fmt.Sprintf(messageFormat, strings.Join(notifications, "\n"), site))
+		values.Add("text", fmt.Sprintf(messageFormat, strings.Join(notifications, "\n"), url))
 
 		res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
 		if err != nil {
