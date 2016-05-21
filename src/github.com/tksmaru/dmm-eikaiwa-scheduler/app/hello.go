@@ -37,16 +37,16 @@ func init() {
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := appengine.NewContext(r)
-	teach := os.Getenv("teacher")
-	if teach == "" {
-		log.Debugf(ctx, "invalid teacher id: %v", teach)
+	teachers := os.Getenv("teacher")
+	if teachers == "" {
+		log.Warningf(ctx, "Invalid ENV settings. teacher: %v", teachers)
 		return
 	}
 
-	teachers := strings.Split(teach, ",")
-	log.Debugf(ctx, "teachers: %v", teachers)
-	for _, teacher := range teachers {
-		err := search(ctx, teacher)
+	ids := strings.Split(teachers, ",")
+	log.Debugf(ctx, "teachers: %v", ids)
+	for _, id := range ids {
+		err := search(ctx, id)
 		if err != nil {
 			log.Warningf(ctx, "err: %v", err)
 		}
