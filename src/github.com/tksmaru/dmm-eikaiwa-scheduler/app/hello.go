@@ -18,6 +18,20 @@ import (
 	"google.golang.org/appengine/urlfetch"
 )
 
+const (
+	maxDays = 2
+	form    = "2006-01-02 15:04:05"
+)
+
+
+type Scraped struct {
+	Name     string
+	Icon     string
+	Page     string
+	Lessons  []time.Time
+}
+
+// DB
 type Schedule struct {
 	Teacher string // 先生のID
 	Name    string
@@ -25,10 +39,23 @@ type Schedule struct {
 	Updated time.Time
 }
 
-const (
-	maxDays = 2
-	form    = "2006-01-02 15:04:05"
-)
+
+// Noti
+type Information struct {
+	Name    string
+	Id      string
+	Page    string
+	Icon    string
+	Lessons []time.Time
+}
+
+func (n *Information) FormattedTime(layout string) []string {
+	s := []string{}
+	for _, time := range n.Lessons {
+		s = append(s, time.Format(layout))
+	}
+	return s
+}
 
 func init() {
 	http.HandleFunc("/check", handler)
@@ -53,11 +80,52 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type Scraped struct {
-	Name     string
-	Icon     string
-	Page     string
-	Lessons  []time.Time
+func search(ctx context.Context, id string) error {
+
+	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
+
+	scrapedInfo, err := scrape(ctx, url)
+	if err != nil {
+		return fmt.Errorf("scrape error: %s, context: %v", url, err)
+	}
+
+	key := datastore.NewKey(ctx, "Schedule", id, 0, nil)
+
+	var old Schedule
+	if err := datastore.Get(ctx, key, &old); err != nil {
+		// Entityが空の場合は見逃す
+		if err.Error() != "datastore: no such entity" {
+			return fmt.Errorf("datastore access error: %s, context: %v", id, err)
+		}
+	}
+
+	new := Schedule{
+		id,
+		scrapedInfo.Name,
+		scrapedInfo.Lessons,
+		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
+	}
+
+	if _, err := datastore.Put(ctx, key, &new); err != nil {
+		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
+	}
+
+	notifications := GetNotifiable(scrapedInfo.Lessons, old.Date)
+	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
+
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	noti := Information{
+		Name:    scrapedInfo.Name,
+		Id:      id,
+		Page:    url,
+		Icon:    scrapedInfo.Icon,
+		Lessons: notifications,
+	}
+	go notify(ctx, noti)
+	return nil
 }
 
 func scrape(ctx context.Context, url string) (Scraped, error) {
@@ -130,70 +198,6 @@ func GetNotifiable(now []time.Time, previous []time.Time) []time.Time {
 		}
 	}
 	return notifiable
-}
-
-func search(ctx context.Context, id string) error {
-
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
-
-	scrapedInfo, err := scrape(ctx, url)
-	if err != nil {
-		return fmt.Errorf("scrape error: %s, context: %v", url, err)
-	}
-
-	key := datastore.NewKey(ctx, "Schedule", id, 0, nil)
-
-	var old Schedule
-	if err := datastore.Get(ctx, key, &old); err != nil {
-		// Entityが空の場合は見逃す
-		if err.Error() != "datastore: no such entity" {
-			return fmt.Errorf("datastore access error: %s, context: %v", id, err)
-		}
-	}
-
-	new := Schedule{
-		id,
-		scrapedInfo.Name,
-		scrapedInfo.Lessons,
-		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
-	}
-
-	if _, err := datastore.Put(ctx, key, &new); err != nil {
-		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
-	}
-
-	notifications := GetNotifiable(scrapedInfo.Lessons, old.Date)
-	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
-
-	if len(notifications) == 0 {
-		return nil
-	}
-
-	noti := Information{
-		Name:    scrapedInfo.Name,
-		Id:      id,
-		Page:    url,
-		Icon:    scrapedInfo.Icon,
-		Lessons: notifications,
-	}
-	go notify(ctx, noti)
-	return nil
-}
-
-type Information struct {
-	Name    string
-	Id      string
-	Page    string
-	Icon    string
-	Lessons []time.Time
-}
-
-func (n *Information) FormattedTime(layout string) []string {
-	s := []string{}
-	for _, time := range n.Lessons {
-		s = append(s, time.Format(layout))
-	}
-	return s
 }
 
 func notify(ctx context.Context, noti Information) {
