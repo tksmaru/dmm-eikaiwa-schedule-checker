@@ -54,10 +54,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 type Scraped struct {
-	Page     string
 	Name     string
-	Image    string
-	Schedule []time.Time
+	Icon     string
+	Page     string
+	Lessons  []time.Time
 }
 
 func scrape(ctx context.Context, url string) (Scraped, error) {
@@ -85,10 +85,11 @@ func scrape(ctx context.Context, url string) (Scraped, error) {
 
 	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		// 直近のmaxDays日分の予約可能情報を対象とする
-		log.Debugf(ctx, "i = %v : %v", i, s.Find(".date").Text())
 		if i >= maxDays {
 			return false
 		}
+		log.Debugf(ctx, "i = %v : %v", i, s.Find(".date").Text())
+
 
 		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
@@ -106,37 +107,54 @@ func scrape(ctx context.Context, url string) (Scraped, error) {
 	s = Scraped{
 		Page:     url,
 		Name:     name,
-		Image:    image,
-		Schedule: available,
+		Icon:     image,
+		Lessons:  available,
 	}
 	log.Debugf(ctx, "scraped data : %v", s)
 
 	return s, nil
 }
 
-func search(ctx context.Context, teacher string) error {
+func GetNotifiable(now []time.Time, previous []time.Time) []time.Time {
+	notifiable := []time.Time{}
+	for _, nowTime := range now {
+		var notify = true
+		for _, prevTime := range previous {
+			if nowTime.Equal(prevTime) {
+				notify = false
+				break
+			}
+		}
+		if notify {
+			notifiable = append(notifiable, nowTime)
+		}
+	}
+	return notifiable
+}
 
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
+func search(ctx context.Context, id string) error {
+
+	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
 
 	scrapedInfo, err := scrape(ctx, url)
 	if err != nil {
 		return fmt.Errorf("scrape error: %s, context: %v", url, err)
 	}
 
-	key := datastore.NewKey(ctx, "Schedule", teacher, 0, nil)
+	key := datastore.NewKey(ctx, "Schedule", id, 0, nil)
 
 	var old Schedule
 	if err := datastore.Get(ctx, key, &old); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
-			return fmt.Errorf("datastore access error: %s, context: %v", teacher, err)
+			return fmt.Errorf("datastore access error: %s, context: %v", id, err)
 		}
 	}
 
 	new := Schedule{
-		teacher,
+		id,
 		scrapedInfo.Name,
-		scrapedInfo.Schedule,
+		scrapedInfo.Lessons,
 		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
 
@@ -144,37 +162,25 @@ func search(ctx context.Context, teacher string) error {
 		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
 	}
 
-	notifications := []time.Time{}
-	for _, newVal := range scrapedInfo.Schedule {
-		var notify = true
-		for _, oldVal := range old.Date {
-			if newVal.Equal(oldVal) {
-				notify = false
-				break
-			}
-		}
-		if notify {
-			notifications = append(notifications, newVal)
-		}
-	}
+	notifications := GetNotifiable(scrapedInfo.Lessons, old.Date)
 	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
 
 	if len(notifications) == 0 {
 		return nil
 	}
 
-	noti := Notification{
+	noti := Information{
 		Name:    scrapedInfo.Name,
-		Id:      teacher,
+		Id:      id,
 		Page:    url,
-		Icon:    scrapedInfo.Image,
+		Icon:    scrapedInfo.Icon,
 		Lessons: notifications,
 	}
 	go notify(ctx, noti)
 	return nil
 }
 
-type Notification struct {
+type Information struct {
 	Name    string
 	Id      string
 	Page    string
@@ -182,7 +188,7 @@ type Notification struct {
 	Lessons []time.Time
 }
 
-func (n *Notification) FormattedTime(layout string) []string {
+func (n *Information) FormattedTime(layout string) []string {
 	s := []string{}
 	for _, time := range n.Lessons {
 		s = append(s, time.Format(layout))
@@ -190,7 +196,7 @@ func (n *Notification) FormattedTime(layout string) []string {
 	return s
 }
 
-func notify(ctx context.Context, noti Notification) {
+func notify(ctx context.Context, noti Information) {
 	notiType := os.Getenv("notification_type")
 	switch notiType {
 	case "slack":
@@ -202,7 +208,7 @@ func notify(ctx context.Context, noti Notification) {
 	}
 }
 
-func toSlack(ctx context.Context, noti Notification) {
+func toSlack(ctx context.Context, noti Information) {
 
 	token := os.Getenv("slack_token")
 	if token == "" {
@@ -237,7 +243,7 @@ func toSlack(ctx context.Context, noti Notification) {
 	}
 }
 
-func toMail(ctx context.Context, noti Notification) {
+func toMail(ctx context.Context, noti Information) {
 	// TODO write code
 }
 
