@@ -23,35 +23,46 @@ const (
 	form    = "2006-01-02 15:04:05"
 )
 
-
-type Scraped struct {
-	Name     string
-	Icon     string
-	Page     string
-	Lessons  []time.Time
+type Teacher struct {
+	Id      string
+	Name    string
+	PageUrl string
+	IconUrl string
 }
 
 // DB
-type Schedule struct {
-	Teacher string // 先生のID
-	Name    string
-	Date    []time.Time // 予約可能日時
-	Updated time.Time
+type Lessons struct {
+	TeacherId string
+	List      []time.Time
+	Updated   time.Time
 }
 
+func (l *Lessons) GetNotifiableLessons(previous []time.Time) []time.Time {
+	notifiable := []time.Time{}
+	for _, nowTime := range l.List {
+		var notify = true
+		for _, prevTime := range previous {
+			if nowTime.Equal(prevTime) {
+				notify = false
+				break
+			}
+		}
+		if notify {
+			notifiable = append(notifiable, nowTime)
+		}
+	}
+	return notifiable
+}
 
 // Noti
 type Information struct {
-	Name    string
-	Id      string
-	Page    string
-	Icon    string
-	Lessons []time.Time
+	Teacher
+	NewLessons []time.Time
 }
 
 func (n *Information) FormattedTime(layout string) []string {
 	s := []string{}
-	for _, time := range n.Lessons {
+	for _, time := range n.NewLessons {
 		s = append(s, time.Format(layout))
 	}
 	return s
@@ -82,65 +93,56 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func search(ctx context.Context, id string) error {
 
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
-
-	scrapedInfo, err := scrape(ctx, url)
+	teacher, lessons, err := getInfo(ctx, id)
 	if err != nil {
-		return fmt.Errorf("scrape error: %s, context: %v", url, err)
+		return fmt.Errorf("scrape error: %s, context: %v", id, err)
 	}
 
-	key := datastore.NewKey(ctx, "Schedule", id, 0, nil)
+	key := datastore.NewKey(ctx, "Lessons", id, 0, nil)
 
-	var old Schedule
-	if err := datastore.Get(ctx, key, &old); err != nil {
+	var prev Lessons
+	if err := datastore.Get(ctx, key, &prev); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
 			return fmt.Errorf("datastore access error: %s, context: %v", id, err)
 		}
 	}
 
-	new := Schedule{
-		id,
-		scrapedInfo.Name,
-		scrapedInfo.Lessons,
-		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
+	if _, err := datastore.Put(ctx, key, &lessons); err != nil {
+		return fmt.Errorf("datastore access error: %s, context: %v", lessons.TeacherId, err)
 	}
 
-	if _, err := datastore.Put(ctx, key, &new); err != nil {
-		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
-	}
+	notifiable := lessons.GetNotifiableLessons(prev.List)
+	log.Debugf(ctx, "notification data: %v, %v", len(notifiable), notifiable)
 
-	notifications := GetNotifiable(scrapedInfo.Lessons, old.Date)
-	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
-
-	if len(notifications) == 0 {
+	if len(notifiable) == 0 {
 		return nil
 	}
 
-	noti := Information{
-		Name:    scrapedInfo.Name,
-		Id:      id,
-		Page:    url,
-		Icon:    scrapedInfo.Icon,
-		Lessons: notifications,
+	inf := Information{
+		Teacher:    teacher,
+		NewLessons: notifiable,
 	}
-	go notify(ctx, noti)
+	go notify(ctx, inf)
 	return nil
 }
 
-func scrape(ctx context.Context, url string) (Scraped, error) {
+func getInfo(ctx context.Context, id string) (Teacher, Lessons, error) {
 
-	var s Scraped
+	var t Teacher
+	var l Lessons
 
 	client := urlfetch.Client(ctx)
+	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
+
 	resp, err := client.Get(url)
 	if err != nil {
-		return s, fmt.Errorf("access error: %s, context: %v", url, err)
+		return t, l, fmt.Errorf("access error: %s, context: %v", url, err)
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
-		return s, fmt.Errorf("Document creation error: %s, context: %v", url, err)
+		return t, l, fmt.Errorf("Document creation error: %s, context: %v", url, err)
 	}
 
 	name := doc.Find("h1").Last().Text()
@@ -158,7 +160,6 @@ func scrape(ctx context.Context, url string) (Scraped, error) {
 		}
 		log.Debugf(ctx, "i = %v : %v", i, s.Find(".date").Text())
 
-
 		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
 			s2, _ := s.Attr("id") // 受講可能時刻
@@ -172,47 +173,34 @@ func scrape(ctx context.Context, url string) (Scraped, error) {
 		return true
 	})
 
-	s = Scraped{
-		Page:     url,
-		Name:     name,
-		Icon:     image,
-		Lessons:  available,
+	t = Teacher{
+		Id:      id,
+		Name:    name,
+		PageUrl: url,
+		IconUrl: image,
 	}
-	log.Debugf(ctx, "scraped data : %v", s)
-
-	return s, nil
+	l = Lessons{
+		TeacherId: id,
+		List:      available,
+		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
+	}
+	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t, l)
+	return t, l, nil
 }
 
-func GetNotifiable(now []time.Time, previous []time.Time) []time.Time {
-	notifiable := []time.Time{}
-	for _, nowTime := range now {
-		var notify = true
-		for _, prevTime := range previous {
-			if nowTime.Equal(prevTime) {
-				notify = false
-				break
-			}
-		}
-		if notify {
-			notifiable = append(notifiable, nowTime)
-		}
-	}
-	return notifiable
-}
-
-func notify(ctx context.Context, noti Information) {
+func notify(ctx context.Context, inf Information) {
 	notiType := os.Getenv("notification_type")
 	switch notiType {
 	case "slack":
-		toSlack(ctx, noti)
+		toSlack(ctx, inf)
 	case "mail":
-		toMail(ctx, noti)
+		toMail(ctx, inf)
 	default:
 		log.Warningf(ctx, "unknown notification type: %v", notiType)
 	}
 }
 
-func toSlack(ctx context.Context, noti Information) {
+func toSlack(ctx context.Context, inf Information) {
 
 	token := os.Getenv("slack_token")
 	if token == "" {
@@ -230,20 +218,20 @@ func toSlack(ctx context.Context, noti Information) {
 	values.Add("token", token)
 	values.Add("channel", channel)
 	values.Add("as_user", "false")
-	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", noti.Name))
-	values.Add("icon_url", noti.Icon)
-	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(noti.FormattedTime(form), "\n"), noti.Page))
+	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", inf.Name))
+	values.Add("icon_url", inf.IconUrl)
+	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(form), "\n"), inf.PageUrl))
 
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
 	if err != nil {
-		log.Debugf(ctx, "noti send error: %s, context: %v", noti.Id, err)
+		log.Debugf(ctx, "notification send error: %s, context: %v", inf.Id, err)
 	}
 	defer res.Body.Close()
 
 	b, err := ioutil.ReadAll(res.Body)
 	if err == nil {
-		log.Debugf(ctx, "response: %v", string(b))
+		log.Debugf(ctx, "Slack response: %v", string(b))
 	}
 }
 
@@ -252,7 +240,7 @@ func toMail(ctx context.Context, noti Information) {
 }
 
 const messageFormat = `
-Hi, you can have a lesson below!
+Hi, you can take a lesson below!
 %s
 
 Access to <%s>
