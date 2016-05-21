@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -9,24 +10,24 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"github.com/PuerkitoBio/goquery"
 
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
-	"google.golang.org/appengine/urlfetch"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/urlfetch"
 )
 
 type Schedule struct {
-	Teacher  string      // 先生のID
-	Date     []time.Time // 予約可能日時
-	Updated  time.Time
+	Teacher string // 先生のID
+	Name    string
+	Date    []time.Time // 予約可能日時
+	Updated time.Time
 }
 
 const (
 	maxDays = 2
-	form = "2006-01-02 15:04:05"
+	form    = "2006-01-02 15:04:05"
 )
 
 func init() {
@@ -52,25 +53,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func search(ctx context.Context, teacher string) error {
+type Scraped struct {
+	Page     string
+	Name     string
+	Image    string
+	Schedule []time.Time
+}
+
+func scrape(ctx context.Context, url string) (Scraped, error) {
+
+	var s Scraped
 
 	client := urlfetch.Client(ctx)
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
 	resp, err := client.Get(url)
 	if err != nil {
-		return fmt.Errorf("access error: %s, context: %v", url, err)
+		return s, fmt.Errorf("access error: %s, context: %v", url, err)
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
-	// get all schedule
+	if err != nil {
+		return s, fmt.Errorf("Document creation error: %s, context: %v", url, err)
+	}
 
-	// teacher's name: Second(last) element of document.getElementsByTagName('h1')
 	name := doc.Find("h1").Last().Text()
-	log.Debugf(ctx, "name : %v", name)
 
-	// teacher's image: document.getElementsByClassName('profile-pic')
 	image, _ := doc.Find(".profile-pic").First().Attr("src")
-	log.Debugf(ctx, "image : %v", image)
 
 	available := []time.Time{}
 	// yyyy-mm-dd HH:MM:ss
@@ -78,21 +85,15 @@ func search(ctx context.Context, teacher string) error {
 
 	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		// 直近のmaxDays日分の予約可能情報を対象とする
-		log.Debugf(ctx, "i = %v", i)
+		log.Debugf(ctx, "i = %v : %v", i, s.Find(".date").Text())
 		if i >= maxDays {
 			return false
 		}
 
-		// TODO 受講日情報要らない予感
-		date := s.Find(".date").Text() // 受講日
-		log.Debugf(ctx, "-----%v-----", date)
-
 		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
 			s2, _ := s.Attr("id") // 受講可能時刻
-			log.Debugf(ctx, "%v", s2)
 			dateString := re.FindString(s2)
-			log.Debugf(ctx, "%v", dateString)
 
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
 			log.Debugf(ctx, "%v", day)
@@ -101,6 +102,26 @@ func search(ctx context.Context, teacher string) error {
 		})
 		return true
 	})
+
+	s = Scraped{
+		Page:     url,
+		Name:     name,
+		Image:    image,
+		Schedule: available,
+	}
+	log.Debugf(ctx, "scraped data : %v", s)
+
+	return s, nil
+}
+
+func search(ctx context.Context, teacher string) error {
+
+	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", teacher)
+
+	scrapedInfo, err := scrape(ctx, url)
+	if err != nil {
+		return fmt.Errorf("scrape error: %s, context: %v", url, err)
+	}
 
 	key := datastore.NewKey(ctx, "Schedule", teacher, 0, nil)
 
@@ -112,9 +133,10 @@ func search(ctx context.Context, teacher string) error {
 		}
 	}
 
-	new := Schedule {
+	new := Schedule{
 		teacher,
-		available,
+		scrapedInfo.Name,
+		scrapedInfo.Schedule,
 		time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
 
@@ -122,8 +144,8 @@ func search(ctx context.Context, teacher string) error {
 		return fmt.Errorf("datastore access error: %s, context: %v", new.Teacher, err)
 	}
 
-	notifications := []string{}
-	for _, newVal := range available {
+	notifications := []time.Time{}
+	for _, newVal := range scrapedInfo.Schedule {
 		var notify = true
 		for _, oldVal := range old.Date {
 			if newVal.Equal(oldVal) {
@@ -132,7 +154,7 @@ func search(ctx context.Context, teacher string) error {
 			}
 		}
 		if notify {
-			notifications = append(notifications, newVal.Format(form))
+			notifications = append(notifications, newVal)
 		}
 	}
 	log.Debugf(ctx, "notification data: %v, %v", len(notifications), notifications)
@@ -141,11 +163,11 @@ func search(ctx context.Context, teacher string) error {
 		return nil
 	}
 
-	noti := Notification {
-		Name: name,
-		Id: teacher,
-		Page: url,
-		Icon: image,
+	noti := Notification{
+		Name:    scrapedInfo.Name,
+		Id:      teacher,
+		Page:    url,
+		Icon:    scrapedInfo.Image,
 		Lessons: notifications,
 	}
 	go notify(ctx, noti)
@@ -157,7 +179,15 @@ type Notification struct {
 	Id      string
 	Page    string
 	Icon    string
-	Lessons []string
+	Lessons []time.Time
+}
+
+func (n *Notification) FormattedTime(layout string) []string {
+	s := []string{}
+	for _, time := range n.Lessons {
+		s = append(s, time.Format(layout))
+	}
+	return s
 }
 
 func notify(ctx context.Context, noti Notification) {
@@ -192,7 +222,7 @@ func toSlack(ctx context.Context, noti Notification) {
 	values.Add("as_user", "false")
 	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", noti.Name))
 	values.Add("icon_url", noti.Icon)
-	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(noti.Lessons, "\n"), noti.Page))
+	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(noti.FormattedTime(form), "\n"), noti.Page))
 
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)

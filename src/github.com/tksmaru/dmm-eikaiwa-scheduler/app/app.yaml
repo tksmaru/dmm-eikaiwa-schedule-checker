@@ -8,4 +8,4 @@ handlers:
 env_variables:
   slack_token: <api_token>
   teacher: 10439
-  channel: '#general'
+  channel: '#general'  notification_type: slack
