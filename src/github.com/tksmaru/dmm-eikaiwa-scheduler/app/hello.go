@@ -93,9 +93,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func search(ctx context.Context, id string) error {
 
-	teacher, lessons, err := getInfo(ctx, id)
-	if err != nil {
-		return fmt.Errorf("scrape error: %s, context: %v", id, err)
+	t := getInfo(ctx, id)
+	if t.err != nil {
+		return fmt.Errorf("scrape error: %s, context: %v", id, t.err)
 	}
 
 	key := datastore.NewKey(ctx, "Lessons", id, 0, nil)
@@ -108,11 +108,11 @@ func search(ctx context.Context, id string) error {
 		}
 	}
 
-	if _, err := datastore.Put(ctx, key, &lessons); err != nil {
-		return fmt.Errorf("datastore access error: %s, context: %v", lessons.TeacherId, err)
+	if _, err := datastore.Put(ctx, key, &t.Lessons); err != nil {
+		return fmt.Errorf("datastore access error: %s, context: %v", t.Id, err)
 	}
 
-	notifiable := lessons.GetNotifiableLessons(prev.List)
+	notifiable := t.GetNotifiableLessons(prev.List)
 	log.Debugf(ctx, "notification data: %v, %v", len(notifiable), notifiable)
 
 	if len(notifiable) == 0 {
@@ -120,29 +120,36 @@ func search(ctx context.Context, id string) error {
 	}
 
 	inf := Information{
-		Teacher:    teacher,
+		Teacher:    t.Teacher,
 		NewLessons: notifiable,
 	}
 	go notify(ctx, inf)
 	return nil
 }
 
-func getInfo(ctx context.Context, id string) (Teacher, Lessons, error) {
+type TeacherInfo struct {
+	Teacher
+	Lessons
+	err     error
+}
 
-	var t Teacher
-	var l Lessons
+func getInfo(ctx context.Context, id string) TeacherInfo {
+
+	var t TeacherInfo
 
 	client := urlfetch.Client(ctx)
 	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return t, l, fmt.Errorf("access error: %s, context: %v", url, err)
+		t.err = fmt.Errorf("access error: %s, context: %v", url, err)
+		return t
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
-		return t, l, fmt.Errorf("Document creation error: %s, context: %v", url, err)
+		t.err = fmt.Errorf("Document creation error: %s, context: %v", url, err)
+		return t
 	}
 
 	name := doc.Find("h1").Last().Text()
@@ -173,19 +180,19 @@ func getInfo(ctx context.Context, id string) (Teacher, Lessons, error) {
 		return true
 	})
 
-	t = Teacher{
+	t.Teacher = Teacher{
 		Id:      id,
 		Name:    name,
 		PageUrl: url,
 		IconUrl: image,
 	}
-	l = Lessons{
+	t.Lessons = Lessons{
 		TeacherId: id,
 		List:      available,
 		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
-	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t, l)
-	return t, l, nil
+	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t.Teacher, t.Lessons)
+	return t
 }
 
 func notify(ctx context.Context, inf Information) {
