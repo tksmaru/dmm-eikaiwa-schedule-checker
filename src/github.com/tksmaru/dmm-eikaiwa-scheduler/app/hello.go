@@ -93,7 +93,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func search(ctx context.Context, id string) error {
 
-	t := getInfo(ctx, id)
+	c := make(chan TeacherInfo)
+	go getInfo(c, ctx, id)
+	t := <- c
+
 	if t.err != nil {
 		return fmt.Errorf("scrape error: %s, context: %v", id, t.err)
 	}
@@ -133,7 +136,7 @@ type TeacherInfo struct {
 	err     error
 }
 
-func getInfo(ctx context.Context, id string) TeacherInfo {
+func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 
 	var t TeacherInfo
 
@@ -143,13 +146,13 @@ func getInfo(ctx context.Context, id string) TeacherInfo {
 	resp, err := client.Get(url)
 	if err != nil {
 		t.err = fmt.Errorf("access error: %s, context: %v", url, err)
-		return t
+		c <- t
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
 		t.err = fmt.Errorf("Document creation error: %s, context: %v", url, err)
-		return t
+		c <- t
 	}
 
 	name := doc.Find("h1").Last().Text()
@@ -192,7 +195,7 @@ func getInfo(ctx context.Context, id string) TeacherInfo {
 		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
 	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t.Teacher, t.Lessons)
-	return t
+	c <- t
 }
 
 func notify(ctx context.Context, inf Information) {
