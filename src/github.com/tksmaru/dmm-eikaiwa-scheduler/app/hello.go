@@ -83,22 +83,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	ids := strings.Split(teachers, ",")
 	log.Debugf(ctx, "teachers: %v", ids)
+
+	e := make(chan error, 10)
 	for _, id := range ids {
-		err := search(ctx, id)
+		go search(e, ctx, id)
+	}
+
+	for _, id := range ids {
+		err := <-e
 		if err != nil {
-			log.Warningf(ctx, "err: %v", err)
+			log.Warningf(ctx, "id: %v, err: %v", id, err)
+		} else {
+			log.Infof(ctx, "id: %v, err: %v", id, err)
 		}
 	}
 }
 
-func search(ctx context.Context, id string) error {
+func search(e chan error, ctx context.Context, id string) {
 
 	c := make(chan TeacherInfo)
 	go getInfo(c, ctx, id)
-	t := <- c
+	t := <-c
 
 	if t.err != nil {
-		return fmt.Errorf("scrape error: %s, context: %v", id, t.err)
+		e <- fmt.Errorf("scrape error: %s, context: %v", id, t.err)
+		return
 	}
 
 	key := datastore.NewKey(ctx, "Lessons", id, 0, nil)
@@ -107,46 +116,46 @@ func search(ctx context.Context, id string) error {
 	if err := datastore.Get(ctx, key, &prev); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
-			return fmt.Errorf("datastore access error: %s, context: %v", id, err)
+			e <- fmt.Errorf("datastore access error: %s, context: %v", id, err)
+			return
 		}
 	}
 
 	if _, err := datastore.Put(ctx, key, &t.Lessons); err != nil {
-		return fmt.Errorf("datastore access error: %s, context: %v", t.Id, err)
+		e <- fmt.Errorf("datastore access error: %s, context: %v", t.Id, err)
+		return
 	}
 
 	notifiable := t.GetNotifiableLessons(prev.List)
 	log.Debugf(ctx, "notification data: %v, %v", len(notifiable), notifiable)
 
-	if len(notifiable) == 0 {
-		return nil
-	}
-
-	inf := Information{
-		Teacher:    t.Teacher,
-		NewLessons: notifiable,
-	}
-	done := make(chan bool)
-	go func(ctx context.Context, inf Information) {
-		notiType := os.Getenv("notification_type")
-		switch notiType {
-		case "slack":
-			toSlack(ctx, inf)
-		case "mail":
-			toMail(ctx, inf)
-		default:
-			log.Warningf(ctx, "unknown notification type: %v", notiType)
+	if len(notifiable) != 0 {
+		inf := Information{
+			Teacher:    t.Teacher,
+			NewLessons: notifiable,
 		}
-		done <- true
-	}(ctx, inf)
-	<- done
-	return nil
+		done := make(chan bool)
+		go func(ctx context.Context, inf Information) {
+			notiType := os.Getenv("notification_type")
+			switch notiType {
+			case "slack":
+				toSlack(ctx, inf)
+			case "mail":
+				toMail(ctx, inf)
+			default:
+				log.Warningf(ctx, "unknown notification type: %v", notiType)
+			}
+			done <- true
+		}(ctx, inf)
+		<-done
+	}
+	e <- nil
 }
 
 type TeacherInfo struct {
 	Teacher
 	Lessons
-	err     error
+	err error
 }
 
 func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
@@ -160,12 +169,14 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 	if err != nil {
 		t.err = fmt.Errorf("access error: %s, context: %v", url, err)
 		c <- t
+		return
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
 		t.err = fmt.Errorf("Document creation error: %s, context: %v", url, err)
 		c <- t
+		return
 	}
 
 	name := doc.Find("h1").Last().Text()
