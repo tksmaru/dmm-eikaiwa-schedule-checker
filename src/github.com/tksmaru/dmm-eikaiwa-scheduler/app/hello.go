@@ -126,7 +126,20 @@ func search(ctx context.Context, id string) error {
 		Teacher:    t.Teacher,
 		NewLessons: notifiable,
 	}
-	go notify(ctx, inf)
+	done := make(chan bool)
+	go func(ctx context.Context, inf Information) {
+		notiType := os.Getenv("notification_type")
+		switch notiType {
+		case "slack":
+			toSlack(ctx, inf)
+		case "mail":
+			toMail(ctx, inf)
+		default:
+			log.Warningf(ctx, "unknown notification type: %v", notiType)
+		}
+		done <- true
+	}(ctx, inf)
+	<- done
 	return nil
 }
 
@@ -196,18 +209,6 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 	}
 	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t.Teacher, t.Lessons)
 	c <- t
-}
-
-func notify(ctx context.Context, inf Information) {
-	notiType := os.Getenv("notification_type")
-	switch notiType {
-	case "slack":
-		toSlack(ctx, inf)
-	case "mail":
-		toMail(ctx, inf)
-	default:
-		log.Warningf(ctx, "unknown notification type: %v", notiType)
-	}
 }
 
 func toSlack(ctx context.Context, inf Information) {
