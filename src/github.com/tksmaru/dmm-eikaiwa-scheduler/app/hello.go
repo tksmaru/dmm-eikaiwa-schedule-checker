@@ -78,7 +78,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 	teachers := os.Getenv("teacher")
 	if teachers == "" {
-		log.Warningf(ctx, "Invalid ENV settings. teacher: %v", teachers)
+		log.Warningf(ctx, "invalid ENV settings. teacher: %v", teachers)
 		return
 	}
 
@@ -93,9 +93,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		err := <-e
 		if err != nil {
-			log.Warningf(ctx, "id: %v, err: %v", id, err)
+			log.Errorf(ctx, "[%s] operation failed for %s. err: %v", id, id, err)
 		} else {
-			log.Infof(ctx, "id: %v, err: %v", id, err)
+			log.Infof(ctx, "[%s] err: %v", id, err)
 		}
 	}
 }
@@ -107,7 +107,7 @@ func search(e chan error, ctx context.Context, id string) {
 	t := <-c
 
 	if t.err != nil {
-		e <- fmt.Errorf("scrape error: %s, context: %v", id, t.err)
+		e <- fmt.Errorf("[%s] scrape failed. context: %v", id, t.err)
 		return
 	}
 
@@ -117,18 +117,18 @@ func search(e chan error, ctx context.Context, id string) {
 	if err := datastore.Get(ctx, key, &prev); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
-			e <- fmt.Errorf("datastore access error: %s, context: %v", id, err)
+			e <- fmt.Errorf("[%s] datastore get operation failed: context: %v", id, err)
 			return
 		}
 	}
 
 	if _, err := datastore.Put(ctx, key, &t.Lessons); err != nil {
-		e <- fmt.Errorf("datastore access error: %s, context: %v", t.Id, err)
+		e <- fmt.Errorf("[%s] datastore put operation failed. context: %v", id, err)
 		return
 	}
 
 	notifiable := t.GetNotifiableLessons(prev.List)
-	log.Debugf(ctx, "notification data: %v, %v", len(notifiable), notifiable)
+	log.Debugf(ctx, "[%s] notification data: %v, %v", id, len(notifiable), notifiable)
 
 	if len(notifiable) != 0 {
 		inf := Information{
@@ -144,7 +144,7 @@ func search(e chan error, ctx context.Context, id string) {
 			case "mail":
 				toMail(ctx, inf)
 			default:
-				log.Warningf(ctx, "unknown notification type: %v", notiType)
+				log.Errorf(ctx, "[%s] unknown notification type. notification_type: %v", id, notiType)
 			}
 			done <- true
 		}(ctx, inf)
@@ -168,14 +168,14 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		t.err = fmt.Errorf("access error: %s, context: %v", url, err)
+		t.err = fmt.Errorf("[%s] urlfetch failed. url: %s, context: %v", id, url, err)
 		c <- t
 		return
 	}
 
 	doc, _ := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
-		t.err = fmt.Errorf("Document creation error: %s, context: %v", url, err)
+		t.err = fmt.Errorf("[%s] document creation failed. url: %s, context: %v", id, url, err)
 		c <- t
 		return
 	}
@@ -193,7 +193,7 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 		if i >= maxDays {
 			return false
 		}
-		log.Debugf(ctx, "i = %v : %v", i, s.Find(".date").Text())
+		log.Debugf(ctx, "[%s] i = %v : %v", id, i, s.Find(".date").Text())
 
 		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
 
@@ -201,7 +201,7 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 			dateString := re.FindString(s2)
 
 			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
-			log.Debugf(ctx, "%v", day)
+			log.Debugf(ctx, "[%s] parsed date: %v", id, day)
 
 			available = append(available, day)
 		})
@@ -219,7 +219,7 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 		List:      available,
 		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
 	}
-	log.Debugf(ctx, "scraped data. Teacher: %v, Lessons: %v", t.Teacher, t.Lessons)
+	log.Debugf(ctx, "[%s] scraped data. Teacher: %v, Lessons: %v", id, t.Teacher, t.Lessons)
 	c <- t
 }
 
@@ -227,13 +227,13 @@ func toSlack(ctx context.Context, inf Information) {
 
 	token := os.Getenv("slack_token")
 	if token == "" {
-		log.Warningf(ctx, "Invalid ENV value. slack_token: %v", token)
+		log.Errorf(ctx, "invalid ENV value. slack_token: %v", token)
 		return
 	}
 
 	channel := os.Getenv("channel")
 	if channel == "" {
-		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", token)
+		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
 		channel = "#general"
 	}
 
@@ -248,13 +248,13 @@ func toSlack(ctx context.Context, inf Information) {
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
 	if err != nil {
-		log.Debugf(ctx, "notification send error: %s, context: %v", inf.Id, err)
+		log.Debugf(ctx, "[%s] notification send failed. context: %v", inf.Id, err)
 	}
 	defer res.Body.Close()
 
 	b, err := ioutil.ReadAll(res.Body)
 	if err == nil {
-		log.Debugf(ctx, "Slack response: %v", string(b))
+		log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
 	}
 }
 
