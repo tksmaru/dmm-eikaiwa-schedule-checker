@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	maxDays  = 2
-	form     = "2006-01-02 15:04:05"
+	maxDays = 2
+	form    = "2006-01-02 15:04:05"
 	infForm = "2006-01-02(Mon) 15:04:05"
 )
 
