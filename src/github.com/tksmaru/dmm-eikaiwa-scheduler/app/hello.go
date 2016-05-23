@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	maxDays = 2
-	form    = "2006-01-02 15:04:05"
+	maxDays  = 2
+	form     = "2006-01-02 15:04:05"
+	infForm = "2006-01-02(Mon) 15:04:05"
 )
 
 type Teacher struct {
@@ -242,7 +243,7 @@ func toSlack(ctx context.Context, inf Information) {
 	values.Add("as_user", "false")
 	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", inf.Name))
 	values.Add("icon_url", inf.IconUrl)
-	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(form), "\n"), inf.PageUrl))
+	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl))
 
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
