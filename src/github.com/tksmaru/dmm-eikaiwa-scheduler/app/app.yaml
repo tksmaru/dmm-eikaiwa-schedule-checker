@@ -8,4 +8,9 @@ handlers:
 env_variables:
   slack_token: <api_token>
   teacher: 10439
-  channel: '#general'  notification_type: slack
+  channel: '#general'  notification_type: slackautomatic_scaling:
+automatic_scaling:
+  min_idle_instances: automatic
+  max_idle_instances: 1
+  min_pending_latency: 5000ms
+  max_pending_latency: automatic
