@@ -15,6 +15,7 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/mail"
 	"google.golang.org/appengine/urlfetch"
 )
 
@@ -258,8 +259,25 @@ func toSlack(ctx context.Context, inf Information) {
 	}
 }
 
-func toMail(ctx context.Context, noti Information) {
-	// TODO write code
+func toMail(ctx context.Context, inf Information) {
+
+	sender := os.Getenv("mail_sender")
+	log.Debugf(ctx, "%v", sender)
+	to := os.Getenv("to")
+	log.Debugf(ctx, "%v", to)
+
+	if sender != "" && to != "" {
+		msg := &mail.Message{
+			Sender:  fmt.Sprintf("DMM Eikaiwa: %s <%s>", inf.Name, sender),
+			To:      []string{to},
+			Subject: "[DMM Eikaiwa] upcoming schedule",
+			Body:    fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
+		}
+		if err := mail.Send(ctx, msg); err != nil {
+			log.Errorf(ctx, "[%s] Couldn't send email: %v", inf.Id, err)
+		}
+	}
+
 }
 
 const messageFormat = `
