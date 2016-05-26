@@ -262,22 +262,25 @@ func toSlack(ctx context.Context, inf Information) {
 func toMail(ctx context.Context, inf Information) {
 
 	sender := os.Getenv("mail_sender")
-	log.Debugf(ctx, "%v", sender)
+	if sender == "" {
+		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))
+		log.Infof(ctx, "[%s] ENV value sender is not set. Default value '%s' is used.", inf.Id, sender)
+	}
 	to := os.Getenv("to")
-	log.Debugf(ctx, "%v", to)
-
-	if sender != "" && to != "" {
-		msg := &mail.Message{
-			Sender:  fmt.Sprintf("DMM Eikaiwa: %s <%s>", inf.Name, sender),
-			To:      []string{to},
-			Subject: "[DMM Eikaiwa] upcoming schedule",
-			Body:    fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
-		}
-		if err := mail.Send(ctx, msg); err != nil {
-			log.Errorf(ctx, "[%s] Couldn't send email: %v", inf.Id, err)
-		}
+	if to == "" {
+		log.Errorf(ctx, "[%s] Invalid ENV value. to: %v", inf.Id, to)
 	}
 
+	msg := &mail.Message{
+		Sender:  fmt.Sprintf("%s from DMM Eikaiwa <%s>", inf.Name, sender),
+		To:      []string{to},
+		Subject: "[DMM Eikaiwa] upcoming schedule",
+		Body:    fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
+	}
+	log.Debugf(ctx, "[%s] mail message: %v", inf.Id, msg)
+	if err := mail.Send(ctx, msg); err != nil {
+		log.Errorf(ctx, "[%s] Couldn't send email: %v", inf.Id, err)
+	}
 }
 
 const messageFormat = `
