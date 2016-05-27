@@ -77,7 +77,7 @@ func init() {
 func handler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := appengine.NewContext(r)
-	teachers := os.Getenv("teacher")
+	teachers := os.Getenv("teachers")
 	if teachers == "" {
 		log.Warningf(ctx, "invalid ENV settings. teacher: %v", teachers)
 		return
@@ -232,7 +232,7 @@ func toSlack(ctx context.Context, inf Information) {
 		return
 	}
 
-	channel := os.Getenv("channel")
+	channel := os.Getenv("slack_channel")
 	if channel == "" {
 		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
 		channel = "#general"
@@ -266,7 +266,7 @@ func toMail(ctx context.Context, inf Information) {
 		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))
 		log.Infof(ctx, "[%s] ENV value sender is not set. Default value '%s' is used.", inf.Id, sender)
 	}
-	to := os.Getenv("to")
+	to := os.Getenv("mail_send_to")
 	if to == "" {
 		log.Errorf(ctx, "[%s] Invalid ENV value. to: %v", inf.Id, to)
 	}

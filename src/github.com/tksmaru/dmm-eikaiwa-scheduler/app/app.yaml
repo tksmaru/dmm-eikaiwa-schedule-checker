@@ -7,9 +7,26 @@ handlers:
   login: admin
 
 env_variables:
+  ## Common settings ##
+  # (required) Teacher IDs. You can set more than one teachers with comma separated value.
+  teachers: <Teacher's ID>
+  # (required) Notification type. Set 'mail' or 'slack'.
+  notification_type: slack
+
+  ## Notification settings for slack ##
+  ## These settings are required if you choose Slack for notification.
+  # (required) Slack API token.
   slack_token: <api_token>
-  teacher: 10439
-  channel: '#general'  notification_type: slackautomatic_scaling:
+  # (optional) Slack channel to send message. Default value is '#general'.
+  #slack_channel: '#general'
+
+  ## Notification settings for mail ##
+  ## These settings are required if you choose e-mail for notification.
+  # (required) Mail Address to send message.
+  mail_send_to: <mail_address>
+  # (optional) Mail sender address. Default value is 'anything@${APP_ID}.appspotmail.com'
+  #mail_sender: <sender mail_address>
+
 automatic_scaling:
   min_idle_instances: automatic
   max_idle_instances: 1
