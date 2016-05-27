@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -79,36 +80,64 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 	teachers := os.Getenv("teachers")
 	if teachers == "" {
-		log.Warningf(ctx, "invalid ENV settings. teacher: %v", teachers)
+		log.Warningf(ctx, "invalid ENV settings. teachers: %v", teachers)
+		return
+	}
+
+	notiType := os.Getenv("notification_type")
+	if notiType == "" {
+		log.Warningf(ctx, "invalid ENV settings. notification_type: %v", notiType)
 		return
 	}
 
 	ids := strings.Split(teachers, ",")
 	log.Debugf(ctx, "teachers: %v", ids)
 
-	e := make(chan error, 10)
+	ic := make(chan Information, 10)
 	for _, id := range ids {
-		go search(e, ctx, id)
+		go search(ic, ctx, id)
 	}
 
-	for _, id := range ids {
-		err := <-e
-		if err != nil {
-			log.Errorf(ctx, "[%s] operation failed for %s. err: %v", id, id, err)
-		} else {
-			log.Infof(ctx, "[%s] err: %v", id, err)
+	switch notiType {
+	case "slack":
+
+		var wg sync.WaitGroup
+		for range ids {
+			inf := <-ic
+			if len(inf.NewLessons) == 0 {
+				continue
+			}
+			wg.Add(1)
+			go toSlack(ctx, inf, &wg)
+		}
+		wg.Wait()
+	case "mail":
+		//
+		mailContents := []Information{}
+		for range ids {
+			inf := <-ic
+			if len(inf.NewLessons) == 0 {
+				continue
+			}
+			mailContents = append(mailContents, inf)
+		}
+		if len(mailContents) != 0 {
+			toMail(ctx, mailContents)
 		}
 	}
 }
 
-func search(e chan error, ctx context.Context, id string) {
+func search(iChan chan Information, ctx context.Context, id string) {
+
+	inf := Information{}
 
 	c := make(chan TeacherInfo)
 	go getInfo(c, ctx, id)
 	t := <-c
 
 	if t.err != nil {
-		e <- fmt.Errorf("[%s] scrape failed. context: %v", id, t.err)
+		log.Errorf(ctx, "[%s] scrape failed. context: %v", id, t.err)
+		iChan <- inf
 		return
 	}
 
@@ -118,40 +147,33 @@ func search(e chan error, ctx context.Context, id string) {
 	if err := datastore.Get(ctx, key, &prev); err != nil {
 		// Entityが空の場合は見逃す
 		if err.Error() != "datastore: no such entity" {
-			e <- fmt.Errorf("[%s] datastore get operation failed: context: %v", id, err)
+			log.Errorf(ctx, "[%s] datastore get operation failed: context: %v", id, err)
+			iChan <- inf
 			return
 		}
 	}
 
 	if _, err := datastore.Put(ctx, key, &t.Lessons); err != nil {
-		e <- fmt.Errorf("[%s] datastore put operation failed. context: %v", id, err)
+		log.Errorf(ctx, "[%s] datastore put operation failed. context: %v", id, err)
+		iChan <- inf
 		return
 	}
 
 	notifiable := t.GetNotifiableLessons(prev.List)
 	log.Debugf(ctx, "[%s] notification data: %v, %v", id, len(notifiable), notifiable)
 
-	if len(notifiable) != 0 {
-		inf := Information{
-			Teacher:    t.Teacher,
-			NewLessons: notifiable,
-		}
-		done := make(chan bool)
-		go func(ctx context.Context, inf Information) {
-			notiType := os.Getenv("notification_type")
-			switch notiType {
-			case "slack":
-				toSlack(ctx, inf)
-			case "mail":
-				toMail(ctx, inf)
-			default:
-				log.Errorf(ctx, "[%s] unknown notification type. notification_type: %v", id, notiType)
-			}
-			done <- true
-		}(ctx, inf)
-		<-done
+	// TODO 通知必要ならinf返す、そうじゃないならnull返す作りにすればいい
+	// サーチ処理自体は非同期だからchannelに突っ込むようにする
+
+	if len(notifiable) == 0 {
+		iChan <- inf
+		return
 	}
-	e <- nil
+
+	iChan <- Information{
+		Teacher:    t.Teacher,
+		NewLessons: notifiable,
+	}
 }
 
 type TeacherInfo struct {
@@ -224,11 +246,12 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 	c <- t
 }
 
-func toSlack(ctx context.Context, inf Information) {
+func toSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 	token := os.Getenv("slack_token")
 	if token == "" {
 		log.Errorf(ctx, "invalid ENV value. slack_token: %v", token)
+		wg.Done()
 		return
 	}
 
@@ -257,29 +280,36 @@ func toSlack(ctx context.Context, inf Information) {
 	if err == nil {
 		log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
 	}
+	wg.Done()
 }
 
-func toMail(ctx context.Context, inf Information) {
+func toMail(ctx context.Context, infs []Information) {
 
 	sender := os.Getenv("mail_sender")
 	if sender == "" {
 		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))
-		log.Infof(ctx, "[%s] ENV value sender is not set. Default value '%s' is used.", inf.Id, sender)
+		log.Infof(ctx, "ENV value sender is not set. Default value '%s' is used.", sender)
 	}
 	to := os.Getenv("mail_send_to")
 	if to == "" {
-		log.Errorf(ctx, "[%s] Invalid ENV value. to: %v", inf.Id, to)
+		log.Errorf(ctx, "Invalid ENV value. to: %v", to)
+		return
+	}
+
+	body := []string{}
+	for _, inf := range infs {
+		body = append(body, fmt.Sprintf(mailFormat, inf.Name, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl))
 	}
 
 	msg := &mail.Message{
-		Sender:  fmt.Sprintf("%s from DMM Eikaiwa <%s>", inf.Name, sender),
+		Sender:  fmt.Sprintf("DMM Eikaiwa schedule checker <%s>", sender),
 		To:      []string{to},
 		Subject: "[DMM Eikaiwa] upcoming schedule",
-		Body:    fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
+		Body:    fmt.Sprint(strings.Join(body, "\n")),
 	}
-	log.Debugf(ctx, "[%s] mail message: %v", inf.Id, msg)
+	log.Debugf(ctx, "mail message: %v", msg)
 	if err := mail.Send(ctx, msg); err != nil {
-		log.Errorf(ctx, "[%s] Couldn't send email: %v", inf.Id, err)
+		log.Errorf(ctx, "Couldn't send email: %v", err)
 	}
 }
 
@@ -288,4 +318,13 @@ Hi, you can take a lesson below!
 %s
 
 Access to <%s>
+`
+
+const mailFormat = `
+Teacher: %s
+
+%s
+
+Access to <%s>
+-------------------------
 `
