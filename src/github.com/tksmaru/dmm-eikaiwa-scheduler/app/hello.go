@@ -80,13 +80,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 	teachers := os.Getenv("teachers")
 	if teachers == "" {
-		log.Warningf(ctx, "invalid ENV settings. teachers: %v", teachers)
+		log.Errorf(ctx, "invalid ENV settings. teachers: %v", teachers)
 		return
 	}
 
 	notiType := os.Getenv("notification_type")
 	if notiType == "" {
-		log.Warningf(ctx, "invalid ENV settings. notification_type: %v", notiType)
+		log.Errorf(ctx, "invalid ENV settings. notification_type: %v", notiType)
 		return
 	}
 
@@ -100,7 +100,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	switch notiType {
 	case "slack":
-
 		var wg sync.WaitGroup
 		for range ids {
 			inf := <-ic
@@ -108,11 +107,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			wg.Add(1)
-			go toSlack(ctx, inf, &wg)
+			go postToSlack(ctx, inf, &wg)
 		}
 		wg.Wait()
+
 	case "mail":
-		//
 		mailContents := []Information{}
 		for range ids {
 			inf := <-ic
@@ -122,7 +121,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			mailContents = append(mailContents, inf)
 		}
 		if len(mailContents) != 0 {
-			toMail(ctx, mailContents)
+			sendMail(ctx, mailContents)
 		}
 	}
 }
@@ -160,10 +159,7 @@ func search(iChan chan Information, ctx context.Context, id string) {
 	}
 
 	notifiable := t.GetNotifiableLessons(prev.List)
-	log.Debugf(ctx, "[%s] notification data: %v, %v", id, len(notifiable), notifiable)
-
-	// TODO 通知必要ならinf返す、そうじゃないならnull返す作りにすればいい
-	// サーチ処理自体は非同期だからchannelに突っ込むようにする
+	log.Debugf(ctx, "[%s] notification data: size=%v, %v", id, len(notifiable), notifiable)
 
 	if len(notifiable) == 0 {
 		iChan <- inf
@@ -246,15 +242,15 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 	c <- t
 }
 
-func toSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
+func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
+
+	defer wg.Done()
 
 	token := os.Getenv("slack_token")
 	if token == "" {
 		log.Errorf(ctx, "invalid ENV value. slack_token: %v", token)
-		wg.Done()
 		return
 	}
-
 	channel := os.Getenv("slack_channel")
 	if channel == "" {
 		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
@@ -280,10 +276,9 @@ func toSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 	if err == nil {
 		log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
 	}
-	wg.Done()
 }
 
-func toMail(ctx context.Context, infs []Information) {
+func sendMail(ctx context.Context, contents []Information) {
 
 	sender := os.Getenv("mail_sender")
 	if sender == "" {
@@ -297,8 +292,11 @@ func toMail(ctx context.Context, infs []Information) {
 	}
 
 	body := []string{}
-	for _, inf := range infs {
-		body = append(body, fmt.Sprintf(mailFormat, inf.Name, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl))
+	for _, inf := range contents {
+		body = append(body, fmt.Sprintf(mailFormat,
+			inf.Name,
+			strings.Join(inf.FormattedTime(infForm), "\n"),
+			inf.PageUrl))
 	}
 
 	msg := &mail.Message{
@@ -322,9 +320,8 @@ Access to <%s>
 
 const mailFormat = `
 Teacher: %s
-
 %s
 
-Access to <%s>
+Access to %s
 -------------------------
 `
