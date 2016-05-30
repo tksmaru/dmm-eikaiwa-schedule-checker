@@ -8,7 +8,6 @@ dependencies:
   override:
     - go get github.com/constabulary/gb/...
     - gb help
-    - cd $HOME/$CIRCLE_PROJECT_REPONAME
     - gb vendor restore
 test:
   override:
