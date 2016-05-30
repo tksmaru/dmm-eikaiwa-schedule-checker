@@ -8,7 +8,15 @@ dependencies:
   override:
     - go get github.com/constabulary/gb/...
     - gb help
-#    - $HOME/go_appengine/goapp build
-#test:
-#  override:
-#    - $HOME/go_appengine/goapp test
+    - cd $HOME/$CIRCLE_PROJECT_REPONAME
+    - gb vendor restore
+test:
+  pre:
+    - cd src/github.com/tksmaru/dmm-eikaiwa-scheduler/app/
+  override:
+    - GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
+
+## next todo's
+#  always fetch the latest app engine sdk
+#  install gb-gae
+#  coverage test with coveralls
