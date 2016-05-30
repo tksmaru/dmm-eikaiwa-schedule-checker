@@ -11,9 +11,8 @@ dependencies:
     - cd $HOME/$CIRCLE_PROJECT_REPONAME
     - gb vendor restore
 test:
-  pre:
-    - cd src/github.com/tksmaru/dmm-eikaiwa-scheduler/app/
   override:
+    - cd $HOME/$CIRCLE_PROJECT_REPONAME/src/github.com/tksmaru/dmm-eikaiwa-scheduler/app/
     - GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
 
 ## next todo's
