@@ -12,7 +12,8 @@ dependencies:
     - gb vendor restore
 test:
   override:
-    - cd $HOME/$CIRCLE_PROJECT_REPONAME/src/github.com/tksmaru/dmm-eikaiwa-scheduler/app/;GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
+    # TODO simplify by using gb-gae or test with Coveralls
+    - cd $HOME/$CIRCLE_PROJECT_REPONAME/src/app/;GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
 
 ## next todo's
 #  always fetch the latest app engine sdk
