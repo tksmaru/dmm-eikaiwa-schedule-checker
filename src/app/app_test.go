@@ -46,7 +46,6 @@ func TestLessons_GetNotifiableLessons_OneNotifiableLessons(t *testing.T) {
 	}
 }
 
-
 func TestLessons_GetNotifiableLessons_NoNotifiableLessons(t *testing.T) {
 
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
@@ -60,5 +59,20 @@ func TestLessons_GetNotifiableLessons_NoNotifiableLessons(t *testing.T) {
 
 	if len(actual) != 0 {
 		t.Fatalf("Notifiable lessons should have none. actual: %v", len(actual))
+	}
+}
+
+func TestInformation_FormattedTime(t *testing.T) {
+
+	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
+
+	inf := Information{
+		NewLessons: []time.Time{date},
+	}
+
+	actual := inf.FormattedTime("2006-01-02(Mon) 15:04:05")
+
+	if actual[0] != "2014-12-31(Wed) 12:13:24" {
+		t.Fatalf("Time should be formatted as '2006-01-02(Mon) 15:04:05'. actual: %v", actual[0])
 	}
 }
