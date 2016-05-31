@@ -17,7 +17,7 @@ test:
   override:
     # TODO simplify by using gb-gae or test with Coveralls
     #- cd $HOME/$CIRCLE_PROJECT_REPONAME/src/app/;GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
-    - gb gae test test -cover -test.v=true app/
+    - gb gae test -cover -test.v=true app/
 
 ## next todo's
 #  always fetch the latest app engine sdk
