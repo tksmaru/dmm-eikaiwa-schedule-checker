@@ -5,7 +5,6 @@ machine:
     Asia/Tokyo
 dependencies:
   pre:
-#    - curl -o $HOME/go_appengine_sdk.zip https://storage.googleapis.com/appengine-sdks/featured/go_appengine_sdk_linux_amd64-1.9.38.zip
     - curl -o $HOME/go_appengine_sdk.zip `python $HOME/$CIRCLE_PROJECT_REPONAME/scripts/get_latest_sdk.py`
     - unzip -q -d $HOME $HOME/go_appengine_sdk.zip
     - goapp version
@@ -22,6 +21,3 @@ test:
     - gb gae test -cover -v -race -covermode=atomic -coverprofile=$HOME/coverage.out app/
   post:
     - GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/ goveralls -coverprofile=$HOME/coverage.out -service=circle-ci -repotoken=$COVERALLS_TOKEN
-
-## next todo's
-#  always fetch the latest app engine sdk
