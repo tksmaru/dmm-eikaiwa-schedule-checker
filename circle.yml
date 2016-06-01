@@ -17,12 +17,9 @@ test:
     - go get github.com/mattn/goveralls
     - go get golang.org/x/tools/cmd/cover
   override:
-    # TODO simplify by using gb-gae or test with Coveralls
-    #- cd $HOME/$CIRCLE_PROJECT_REPONAME/src/app/;GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/vendor $HOME/go_appengine/goapp test -cover -test.v=true
     - gb gae test -cover -v -race -covermode=atomic -coverprofile=$HOME/coverage.out app/
   post:
     - GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/ goveralls -coverprofile=$HOME/coverage.out -service=circle-ci -repotoken=$COVERALLS_TOKEN
 
 ## next todo's
 #  always fetch the latest app engine sdk
-#  coverage test with coveralls
