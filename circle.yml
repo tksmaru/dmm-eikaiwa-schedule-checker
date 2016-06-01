@@ -1,0 +1,23 @@
+machine:
+  environment:
+    PATH: $HOME/go_appengine:$PATH
+  timezone:
+    Asia/Tokyo
+dependencies:
+  pre:
+    - curl -o $HOME/go_appengine_sdk.zip `python $HOME/$CIRCLE_PROJECT_REPONAME/scripts/get_latest_sdk.py`
+    - unzip -q -d $HOME $HOME/go_appengine_sdk.zip
+    - goapp version
+  override:
+    - go get github.com/constabulary/gb/...
+    - go get code.palmstonegames.com/gb-gae
+    - gb help
+    - gb vendor restore
+test:
+  pre:
+    - go get github.com/mattn/goveralls
+    - go get golang.org/x/tools/cmd/cover
+  override:
+    - gb gae test -cover -v -race -covermode=atomic -coverprofile=$HOME/coverage.out app/
+  post:
+    - GOPATH=$HOME/$CIRCLE_PROJECT_REPONAME/ goveralls -coverprofile=$HOME/coverage.out -service=circle-ci -repotoken=$COVERALLS_TOKEN
