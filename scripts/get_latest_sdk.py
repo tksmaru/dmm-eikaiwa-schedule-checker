@@ -11,7 +11,7 @@ class HeadRequest(urllib2.Request):
     def get_method(self):
         return "HEAD"
 
-GO_SDK_RE = re.compile(r'featured/go_appengine_sdk_darwin_amd64-(\d+\.\d+\.\d+).zip')
+GO_SDK_RE = re.compile(r'featured/go_appengine_sdk_linux_amd64-(\d+\.\d+\.\d+).zip')
 URL = "https://www.googleapis.com/storage/v1/b/appengine-sdks/o?prefix=featured"
 
 raw_bucket_list = urllib2.urlopen(URL).read()
