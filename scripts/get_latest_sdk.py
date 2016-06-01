@@ -17,8 +17,6 @@ URL = "https://www.googleapis.com/storage/v1/b/appengine-sdks/o?prefix=featured"
 raw_bucket_list = urllib2.urlopen(URL).read()
 bucket_list = json.loads(raw_bucket_list)
 
-#print bucket_list
-
 all_sdks = bucket_list['items']
 go_sdks = [
     sdk for sdk in all_sdks if GO_SDK_RE.match(sdk['name'])
@@ -40,7 +38,7 @@ for sdk in go_sdks:
         request = HeadRequest(url)
         urllib2.urlopen(request)
     except urllib2.HTTPError as e:
-        print "not exists or not yet published"
+        # print "not exists or not yet published"
         continue
     else:
         print url
