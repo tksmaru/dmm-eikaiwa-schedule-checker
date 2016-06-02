@@ -1,6 +1,8 @@
 package app
 
 import (
+	"google.golang.org/appengine/aetest"
+	"os"
 	"testing"
 	"time"
 )
@@ -9,9 +11,9 @@ func TestLessons_GetNotifiableLessons_NotifiableLessons(t *testing.T) {
 
 	expected := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 
-	l := Lessons {
+	l := Lessons{
 		TeacherId: "id",
-		List: []time.Time{expected},
+		List:      []time.Time{expected},
 	}
 
 	actual := l.GetNotifiableLessons([]time.Time{})
@@ -30,9 +32,9 @@ func TestLessons_GetNotifiableLessons_OneNotifiableLessons(t *testing.T) {
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 	expected := time.Date(2014, time.December, 31, 13, 13, 24, 0, time.UTC)
 
-	l := Lessons {
+	l := Lessons{
 		TeacherId: "id",
-		List: []time.Time{date, expected},
+		List:      []time.Time{date, expected},
 	}
 
 	actual := l.GetNotifiableLessons([]time.Time{date})
@@ -50,9 +52,9 @@ func TestLessons_GetNotifiableLessons_NoNotifiableLessons(t *testing.T) {
 
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 
-	l := Lessons {
+	l := Lessons{
 		TeacherId: "id",
-		List: []time.Time{date},
+		List:      []time.Time{date},
 	}
 
 	actual := l.GetNotifiableLessons([]time.Time{date})
@@ -74,5 +76,25 @@ func TestInformation_FormattedTime(t *testing.T) {
 
 	if actual[0] != "2014-12-31(Wed) 12:13:24" {
 		t.Fatalf("Time should be formatted as '2006-01-02(Mon) 15:04:05'. actual: %v", actual[0])
+	}
+}
+
+func TestSomething(t *testing.T) {
+	reset := setTestEnv("mail_send_to", "hoge@example.com")
+	defer reset()
+
+	t.Log(os.Getenv("mail_send_to"))
+
+	ctx, _, _ := aetest.NewContext()
+
+	sendMail(ctx, []Information{})
+}
+
+// test helper
+func setTestEnv(key, val string) func() {
+	preVal := os.Getenv(key)
+	os.Setenv(key, val)
+	return func() {
+		os.Setenv(key, preVal)
 	}
 }
