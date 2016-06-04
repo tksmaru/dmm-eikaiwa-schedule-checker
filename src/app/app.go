@@ -242,41 +242,102 @@ func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
 	c <- t
 }
 
-func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
+// 送信部分のインタフェース
+type Sender func(ctx context.Context, values url.Values) ([]byte, error)
 
-	defer wg.Done()
+// インタフェース
+type Notifier interface {
+	Notify() ([]byte, error)
+	Compose([]Information) error
+}
+
+type Slack struct{
+	context.Context
+	Post Sender
+	Content url.Values
+}
+
+func (s *Slack) Notify() ([]byte, error){
+	b, err := s.Post(s.Context, s.Content)
+	if err != nil {
+		err = fmt.Errorf("notification send failed. context: %v", err.Error())
+		return nil, err
+	}
+	return b, nil
+}
+
+func (s *Slack) Compose(messages []Information) error {
 
 	token := os.Getenv("slack_token")
 	if token == "" {
-		log.Errorf(ctx, "invalid ENV value. slack_token: %v", token)
-		return
+		return fmt.Errorf("invalid ENV value. slack_token: %v", token)
 	}
 	channel := os.Getenv("slack_channel")
 	if channel == "" {
-		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
+		log.Infof(s.Context, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
 		channel = "#general"
 	}
+	if len(messages) == 0 {
+		return fmt.Errorf("messages must contain one. len: %v", len(messages))
+	}
+	inf := messages[0]
 
 	values := url.Values{}
 	values.Add("token", token)
 	values.Add("channel", channel)
 	values.Add("as_user", "false")
 	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", inf.Name))
-	values.Add("icon_url", inf.IconUrl)
+	values.Add("icon_url", messages[0].IconUrl)
 	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl))
+	s.Content = values
+
+	return nil
+}
+
+func NewSlack(ctx context.Context, sender Sender) *Slack{
+	return &Slack{
+		Context: ctx,
+		Post: sender,
+	}
+}
+
+// Senderの実装
+func send(ctx context.Context, values url.Values) ([]byte, error) {
 
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
-	if err != nil {
-		log.Debugf(ctx, "[%s] notification send failed. context: %v", inf.Id, err)
-	}
 	defer res.Body.Close()
-
-	b, err := ioutil.ReadAll(res.Body)
-	if err == nil {
-		log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
+	if err != nil {
+		err = fmt.Errorf("notification send failed. context: %v", err.Error())
+		return nil, err
 	}
+	b, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		err = fmt.Errorf("response read failure. context: %v", err.Error())
+		return nil, err
+	}
+	return b, nil
 }
+
+
+func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	slack := NewSlack(ctx, send)
+	err := slack.Compose([]Information{inf})
+	if err != nil {
+		log.Errorf(ctx, "[%s] message compose error. context: %v", inf.Id, err.Error())
+		return
+	}
+	b, err := slack.Notify()
+	if err != nil {
+		log.Errorf(ctx, "[%s] slack notification error. context: %v", inf.Id, err.Error())
+		return
+	}
+	log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
+}
+
 
 func sendMail(ctx context.Context, contents []Information) {
 
