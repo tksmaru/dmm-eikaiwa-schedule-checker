@@ -21,7 +21,6 @@ import (
 const (
 	maxDays = 2
 	form    = "2006-01-02 15:04:05"
-	infForm = "2006-01-02(Mon) 15:04:05"
 )
 
 type Teacher struct {
@@ -244,13 +243,13 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	slack := NewSlack(ctx, send)
-	err := slack.Compose([]Information{inf})
+	message, err := Compose(ctx, inf)
 	if err != nil {
 		log.Errorf(ctx, "[%s] message compose error. context: %v", inf.Id, err.Error())
 		return
 	}
-	b, err := slack.Notify()
+
+	b, err := NewSlack(ctx, send).Send(message)
 	if err != nil {
 		log.Errorf(ctx, "[%s] slack notification error. context: %v", inf.Id, err.Error())
 		return
