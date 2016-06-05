@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -40,31 +40,6 @@ type Message struct {
 	UserName string
 	IconUrl  string
 	Text     string
-}
-
-//
-func Compose(ctx context.Context, inf Information) (*Message, error) {
-
-	token := os.Getenv("slack_token")
-	if token == "" {
-		return nil, fmt.Errorf("invalid ENV value. slack_token: %v", token)
-	}
-	channel := os.Getenv("slack_channel")
-	if channel == "" {
-		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
-		channel = "#general"
-	}
-
-	m := &Message{
-		Token:    token,
-		Channel:  channel,
-		AsUser:   false,
-		UserName: fmt.Sprintf("%s from DMM Eikaiwa", inf.Name),
-		IconUrl:  inf.IconUrl,
-		Text:     fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
-	}
-
-	return m, nil
 }
 
 func NewSlack(ctx context.Context, sender Sender) *Slack {
@@ -98,6 +73,31 @@ func send(ctx context.Context, m *Message) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+//
+func ComposeMessage(ctx context.Context, inf Information) (*Message, error) {
+
+	token := os.Getenv("slack_token")
+	if token == "" {
+		return nil, fmt.Errorf("invalid ENV value. slack_token: %v", token)
+	}
+	channel := os.Getenv("slack_channel")
+	if channel == "" {
+		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
+		channel = "#general"
+	}
+
+	m := &Message{
+		Token:    token,
+		Channel:  channel,
+		AsUser:   false,
+		UserName: fmt.Sprintf("%s from DMM Eikaiwa", inf.Name),
+		IconUrl:  inf.IconUrl,
+		Text:     fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl),
+	}
+
+	return m, nil
 }
 
 const messageFormat = `

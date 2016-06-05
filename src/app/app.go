@@ -14,7 +14,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/mail"
 	"google.golang.org/appengine/urlfetch"
 )
 
@@ -243,7 +242,7 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	message, err := Compose(ctx, inf)
+	message, err := ComposeMessage(ctx, inf)
 	if err != nil {
 		log.Errorf(ctx, "[%s] message compose error. context: %v", inf.Id, err.Error())
 		return
@@ -259,41 +258,13 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 func sendMail(ctx context.Context, contents []Information) {
 
-	sender := os.Getenv("mail_sender")
-	if sender == "" {
-		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))
-		log.Infof(ctx, "ENV value sender is not set. Default value '%s' is used.", sender)
-	}
-	to := os.Getenv("mail_send_to")
-	if to == "" {
-		log.Errorf(ctx, "Invalid ENV value. to: %v", to)
+	msg, err := ComposeMail(ctx, contents)
+	if err != nil {
+		log.Errorf(ctx, "failed to compose e-mail message. context: %v", err.Error())
 		return
 	}
 
-	body := []string{}
-	for _, inf := range contents {
-		body = append(body, fmt.Sprintf(mailFormat,
-			inf.Name,
-			strings.Join(inf.FormattedTime(infForm), "\n"),
-			inf.PageUrl))
-	}
-
-	msg := &mail.Message{
-		Sender:  fmt.Sprintf("DMM Eikaiwa schedule checker <%s>", sender),
-		To:      []string{to},
-		Subject: "[DMM Eikaiwa] upcoming schedule",
-		Body:    fmt.Sprint(strings.Join(body, "\n")),
-	}
-	log.Debugf(ctx, "mail message: %v", msg)
-	if err := mail.Send(ctx, msg); err != nil {
+	if err := NewMail(ctx).Send(msg); err != nil {
 		log.Errorf(ctx, "Couldn't send email: %v", err)
 	}
 }
-
-const mailFormat = `
-Teacher: %s
-%s
-
-Access to %s
--------------------------
-`
