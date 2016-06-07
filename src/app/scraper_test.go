@@ -1,8 +1,8 @@
 package app
 
 import (
-	"time"
 	"testing"
+	"time"
 )
 
 func TestLessons_GetNotifiableLessons_NotifiableLessons(t *testing.T) {
