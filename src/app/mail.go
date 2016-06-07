@@ -26,6 +26,10 @@ func NewMail(ctx context.Context) *Mail {
 
 func ComposeMail(ctx context.Context, contents []Information) (*mail.Message, error) {
 
+	if contents == nil || len(contents) == 0 {
+		return nil, fmt.Errorf("contents has no value. contents: %v", contents)
+	}
+
 	sender := os.Getenv("mail_sender")
 	if sender == "" {
 		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))

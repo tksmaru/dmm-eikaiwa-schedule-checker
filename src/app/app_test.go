@@ -22,7 +22,7 @@ func TestInformation_FormattedTime(t *testing.T) {
 	}
 }
 
-func TestSomething(t *testing.T) {
+func TestSendMail(t *testing.T) {
 	reset := setTestEnv("mail_send_to", "hoge@example.com")
 	defer reset()
 
@@ -30,7 +30,7 @@ func TestSomething(t *testing.T) {
 
 	ctx, _, _ := aetest.NewContext()
 
-	sendMail(ctx, []Information{})
+	sendMail(ctx, setInformation())
 }
 
 // test helper
