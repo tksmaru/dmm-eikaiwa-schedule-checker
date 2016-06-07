@@ -1,57 +1,21 @@
 package app
 
 import (
-	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"net/http"
-	"os"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
-
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/urlfetch"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
 
 const (
 	maxDays = 2
 	form    = "2006-01-02 15:04:05"
 )
-
-type Teacher struct {
-	Id      string
-	Name    string
-	PageUrl string
-	IconUrl string
-}
-
-// DB
-type Lessons struct {
-	TeacherId string
-	List      []time.Time
-	Updated   time.Time
-}
-
-func (l *Lessons) GetNotifiableLessons(previous []time.Time) []time.Time {
-	notifiable := []time.Time{}
-	for _, nowTime := range l.List {
-		var notify = true
-		for _, prevTime := range previous {
-			if nowTime.Equal(prevTime) {
-				notify = false
-				break
-			}
-		}
-		if notify {
-			notifiable = append(notifiable, nowTime)
-		}
-	}
-	return notifiable
-}
 
 // Noti
 type Information struct {
@@ -126,8 +90,8 @@ func search(iChan chan Information, ctx context.Context, id string) {
 
 	inf := Information{}
 
-	c := make(chan TeacherInfo)
-	go getInfo(c, ctx, id)
+	c := make(chan TeacherInfoError)
+	go NewScraper(ctx, get).getInfoAsync(c, id)
 	t := <-c
 
 	if t.err != nil {
@@ -166,76 +130,6 @@ func search(iChan chan Information, ctx context.Context, id string) {
 		Teacher:    t.Teacher,
 		NewLessons: notifiable,
 	}
-}
-
-type TeacherInfo struct {
-	Teacher
-	Lessons
-	err error
-}
-
-func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
-
-	var t TeacherInfo
-
-	client := urlfetch.Client(ctx)
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		t.err = fmt.Errorf("[%s] urlfetch failed. url: %s, context: %v", id, url, err)
-		c <- t
-		return
-	}
-
-	doc, _ := goquery.NewDocumentFromResponse(resp)
-	if err != nil {
-		t.err = fmt.Errorf("[%s] document creation failed. url: %s, context: %v", id, url, err)
-		c <- t
-		return
-	}
-
-	name := doc.Find("h1").Last().Text()
-
-	image, _ := doc.Find(".profile-pic").First().Attr("src")
-
-	available := []time.Time{}
-	// yyyy-mm-dd HH:MM:ss
-	re := regexp.MustCompile("[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[03]0:00")
-
-	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		// 直近のmaxDays日分の予約可能情報を対象とする
-		if i >= maxDays {
-			return false
-		}
-		log.Debugf(ctx, "[%s] i = %v : %v", id, i, s.Find(".date").Text())
-
-		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
-
-			s2, _ := s.Attr("id") // 受講可能時刻
-			dateString := re.FindString(s2)
-
-			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
-			log.Debugf(ctx, "[%s] parsed date: %v", id, day)
-
-			available = append(available, day)
-		})
-		return true
-	})
-
-	t.Teacher = Teacher{
-		Id:      id,
-		Name:    name,
-		PageUrl: url,
-		IconUrl: image,
-	}
-	t.Lessons = Lessons{
-		TeacherId: id,
-		List:      available,
-		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
-	}
-	log.Debugf(ctx, "[%s] scraped data. Teacher: %v, Lessons: %v", id, t.Teacher, t.Lessons)
-	c <- t
 }
 
 func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
