@@ -95,8 +95,6 @@ func (sc *Scraper) GetInfo(id string) (*TeacherInfo, error) {
 	}
 	defer rc.Close()
 
-	//log.Debugf(sc.Context, "%v", rc)
-
 	doc, err := goquery.NewDocumentFromReader(rc)
 	if err != nil {
 		return nil, fmt.Errorf("[%s] document creation failed. context: %v", id, err)
