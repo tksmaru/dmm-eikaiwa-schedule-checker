@@ -85,7 +85,7 @@ func NewScraper(ctx context.Context, fetcher Fetcher) *Scraper {
 	}
 }
 
-func (sc *Scraper) getInfo(id string) (*TeacherInfo, error) {
+func (sc *Scraper) GetInfo(id string) (*TeacherInfo, error) {
 
 	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
 
@@ -147,9 +147,9 @@ func (sc *Scraper) getInfo(id string) (*TeacherInfo, error) {
 
 }
 
-func (sc *Scraper) getInfoAsync(c chan TeacherInfoError, id string) {
+func (sc *Scraper) GetInfoAsync(c chan TeacherInfoError, id string) {
 
-	t, err := sc.getInfo(id)
+	t, err := sc.GetInfo(id)
 	if err != nil {
 		c <- TeacherInfoError{
 			err: err,

@@ -86,7 +86,7 @@ func search(iChan chan Information, ctx context.Context, id string) {
 	inf := Information{}
 
 	c := make(chan TeacherInfoError)
-	go NewScraper(ctx, get).getInfoAsync(c, id)
+	go NewScraper(ctx, get).GetInfoAsync(c, id)
 	t := <-c
 
 	if t.err != nil {
