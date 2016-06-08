@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	maxDays = 2
+	form    = "2006-01-02 15:04:05"
+)
+
 type Teacher struct {
 	Id      string
 	Name    string
