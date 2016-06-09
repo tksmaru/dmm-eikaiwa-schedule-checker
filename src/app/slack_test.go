@@ -57,14 +57,7 @@ func TestComposeMessage_ShouldSucceed_WithDefaultSlackChannel(t *testing.T) {
 		t.Fatalf("ComposeMessage should succeed without any error. actual: %v", err.Error())
 	}
 
-	expected := &Message{
-		Token:    "abcdefg",
-		Channel:  "#general",
-		AsUser:   false,
-		UserName: "test_teacher from DMM Eikaiwa",
-		IconUrl:  "http://example.com/teacher/image.png",
-		Text:     expectedText,
-	}
+	expected := createDefaultMessage()
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("ComposeMessage expected %v, but %v", expected, actual)
 	}
@@ -88,25 +81,11 @@ func TestComposeMessage_ShouldSucceed_WithAnySlackChannel(t *testing.T) {
 		t.Fatalf("ComposeMessage should succeed without any error. actual: %v", err.Error())
 	}
 
-	expected := &Message{
-		Token:    "abcdefg",
-		Channel:  "#test",
-		AsUser:   false,
-		UserName: "test_teacher from DMM Eikaiwa",
-		IconUrl:  "http://example.com/teacher/image.png",
-		Text:     expectedText,
-	}
+	expected := createMessage("#test")
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("ComposeMessage expected %v, but %v", expected, actual)
 	}
 }
-
-const expectedText = `
-Hi, you can take a lesson below!
-2014-12-31(Wed) 12:13:24
-
-Access to <http://example.com/teacher/>
-`
 
 // mock
 func mockErrorSend(ctx context.Context, m *Message) ([]byte, error) {
@@ -120,14 +99,7 @@ func TestSlack_Send_ShouldFail_WithSendError(t *testing.T) {
 	}
 	defer done()
 
-	m := &Message{
-		Token:    "abcdefg",
-		Channel:  "#test",
-		AsUser:   false,
-		UserName: "test_teacher from DMM Eikaiwa",
-		IconUrl:  "http://example.com/teacher/image.png",
-		Text:     expectedText,
-	}
+	m := createDefaultMessage()
 
 	res, err := NewSlack(ctx, mockErrorSend).Send(m)
 	if res != nil {
@@ -152,14 +124,7 @@ func TestSlack_Send_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 	}
 	defer done()
 
-	m := &Message{
-		Token:    "abcdefg",
-		Channel:  "#test",
-		AsUser:   false,
-		UserName: "test_teacher from DMM Eikaiwa",
-		IconUrl:  "http://example.com/teacher/image.png",
-		Text:     expectedText,
-	}
+	m := createDefaultMessage()
 
 	b, err := NewSlack(ctx, mockSuccessSend).Send(m)
 	if err != nil {
@@ -171,3 +136,27 @@ func TestSlack_Send_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 		t.Fatalf("Slack_Send expected %v, but %v", expected, string(b))
 	}
 }
+
+// test helper
+
+func createDefaultMessage() *Message {
+	return createMessage("#general")
+}
+
+func createMessage(ch string) *Message {
+	return &Message{
+		Token:    "abcdefg",
+		Channel:  ch,
+		AsUser:   false,
+		UserName: "test_teacher from DMM Eikaiwa",
+		IconUrl:  "http://example.com/teacher/image.png",
+		Text:     expectedText,
+	}
+}
+
+const expectedText = `
+Hi, you can take a lesson below!
+2014-12-31(Wed) 12:13:24
+
+Access to <http://example.com/teacher/>
+`
