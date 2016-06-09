@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestInformation_FormattedTime(t *testing.T) {
+func TestInformation_FormattedTime_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 
@@ -22,7 +22,7 @@ func TestInformation_FormattedTime(t *testing.T) {
 	}
 }
 
-func TestSendMail(t *testing.T) {
+func TestSendMail_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 	reset := setTestEnv("mail_send_to", "hoge@example.com")
 	defer reset()
 
@@ -30,7 +30,7 @@ func TestSendMail(t *testing.T) {
 
 	ctx, _, _ := aetest.NewContext()
 
-	sendMail(ctx, setInformation())
+	sendMail(ctx, getSliceOfInformation())
 }
 
 // test helper

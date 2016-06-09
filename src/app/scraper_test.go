@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestLessons_GetNotifiableLessons_NotifiableLessons(t *testing.T) {
+func TestLessons_GetNotifiableLessons_ShouldSucceed_WithNotifiableLessons(t *testing.T) {
 
 	expected := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 
@@ -25,7 +25,7 @@ func TestLessons_GetNotifiableLessons_NotifiableLessons(t *testing.T) {
 	}
 }
 
-func TestLessons_GetNotifiableLessons_OneNotifiableLessons(t *testing.T) {
+func TestLessons_GetNotifiableLessons_ShouldSucceed_WithOneNotifiableLesson(t *testing.T) {
 
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 	expected := time.Date(2014, time.December, 31, 13, 13, 24, 0, time.UTC)
@@ -46,7 +46,7 @@ func TestLessons_GetNotifiableLessons_OneNotifiableLessons(t *testing.T) {
 	}
 }
 
-func TestLessons_GetNotifiableLessons_NoNotifiableLessons(t *testing.T) {
+func TestLessons_GetNotifiableLessons_ShouldSucceed_WithoutNotifiableLessons(t *testing.T) {
 
 	date := time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)
 

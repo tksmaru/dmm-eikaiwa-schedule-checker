@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestNewMail(t *testing.T) {
+func TestNewMail_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +21,7 @@ func TestNewMail(t *testing.T) {
 	}
 }
 
-func TestComposeMail_Succeeds_DefaultMailSenderSettings(t *testing.T) {
+func TestComposeMail_ShouldSucceed_WithDefaultMailSenderSettings(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestComposeMail_Succeeds_DefaultMailSenderSettings(t *testing.T) {
 	reset := setTestEnv("mail_send_to", "hoge@example.com")
 	defer reset()
 
-	actual, err := ComposeMail(ctx, setInformation())
+	actual, err := ComposeMail(ctx, getSliceOfInformation())
 	if err != nil {
 		t.Fatalf("ComposeMail should succeed without any errors. actual error: %s", err.Error())
 	}
@@ -49,7 +49,7 @@ func TestComposeMail_Succeeds_DefaultMailSenderSettings(t *testing.T) {
 	}
 }
 
-func TestComposeMail_Succeeds_WithMailSenderSettings(t *testing.T) {
+func TestComposeMail_ShouldSucceed_WithAnyMailSenderSettings(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestComposeMail_Succeeds_WithMailSenderSettings(t *testing.T) {
 	reset2 := setTestEnv("mail_sender", "hogeadmin@example.com")
 	defer reset2()
 
-	actual, err := ComposeMail(ctx, setInformation())
+	actual, err := ComposeMail(ctx, getSliceOfInformation())
 	if err != nil {
 		t.Fatalf("ComposeMail should succeed without any errors. actual error: %s", err.Error())
 	}
@@ -80,14 +80,14 @@ func TestComposeMail_Succeeds_WithMailSenderSettings(t *testing.T) {
 	}
 }
 
-func TestComposeMail_Fails_IfToIsNotSet(t *testing.T) {
+func TestComposeMail_ShouldFail_WhenToNotSet(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer done()
 
-	m, err := ComposeMail(ctx, setInformation())
+	m, err := ComposeMail(ctx, getSliceOfInformation())
 	if m != nil {
 		t.Fatalf("ComposeMail should fail if ENV value 'to' is not set.: %v", m)
 	}
@@ -99,7 +99,7 @@ func TestComposeMail_Fails_IfToIsNotSet(t *testing.T) {
 
 }
 
-func TestComposeMail_Fails_IfInformationEmpty(t *testing.T) {
+func TestComposeMail_ShouldFail_WhenInformationEmpty(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func TestComposeMail_Fails_IfInformationEmpty(t *testing.T) {
 	}
 }
 
-func TestComposeMail_Fails_IfInformationNil(t *testing.T) {
+func TestComposeMail_ShouldFail_WhenInformationNil(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestComposeMail_Fails_IfInformationNil(t *testing.T) {
 
 // test helper
 
-func setInformation() []Information {
+func getInformation() Information {
 	t := Teacher{
 		Id:      "11111",
 		Name:    "test_teacher",
@@ -154,7 +154,11 @@ func setInformation() []Information {
 		Teacher:    t,
 		NewLessons: []time.Time{time.Date(2014, time.December, 31, 12, 13, 24, 0, time.UTC)},
 	}
-	return []Information{i}
+	return i
+}
+
+func getSliceOfInformation() []Information {
+	return []Information{getInformation()}
 }
 
 const expectedBody = `
