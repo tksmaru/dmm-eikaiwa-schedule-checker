@@ -86,7 +86,7 @@ func search(iChan chan Information, ctx context.Context, id string) {
 	inf := Information{}
 
 	c := make(chan TeacherInfoError)
-	go NewScraper(ctx, get).GetInfoAsync(c, id)
+	go NewScraper(ctx).GetInfoAsync(c, id)
 	t := <-c
 
 	if t.err != nil {
@@ -137,7 +137,7 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 		return
 	}
 
-	b, err := NewSlack(ctx, send).Send(message)
+	b, err := NewSlack(ctx).Send(message)
 	if err != nil {
 		log.Errorf(ctx, "[%s] slack notification error. context: %v", inf.Id, err.Error())
 		return

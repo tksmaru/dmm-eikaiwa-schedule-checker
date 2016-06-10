@@ -57,8 +57,10 @@ type TeacherInfoError struct {
 	err error
 }
 
-// i/f
+// Interface
 type Fetcher func(ctx context.Context, url string) (io.ReadCloser, error)
+
+type Now func() time.Time
 
 // impl
 func get(ctx context.Context, url string) (io.ReadCloser, error) {
@@ -68,20 +70,24 @@ func get(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("urlfetch failed. url: %s, context: %v", url, err.Error())
 	}
-	//defer resp.Body.Close()
-
 	return resp.Body, nil
+}
+
+func now() time.Time {
+	return time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60))
 }
 
 type Scraper struct {
 	context.Context
 	get Fetcher
+	now Now
 }
 
-func NewScraper(ctx context.Context, fetcher Fetcher) *Scraper {
+func NewScraper(ctx context.Context) *Scraper {
 	return &Scraper{
 		Context: ctx,
-		get:     fetcher,
+		get:     get,
+		now:     now,
 	}
 }
 
@@ -138,7 +144,7 @@ func (sc *Scraper) GetInfo(id string) (*TeacherInfo, error) {
 	t.Lessons = Lessons{
 		TeacherId: id,
 		List:      available,
-		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
+		Updated:   sc.now(),
 	}
 	log.Debugf(sc.Context, "[%s] scraped data. Teacher: %v, Lessons: %v", id, t.Teacher, t.Lessons)
 	return t, nil

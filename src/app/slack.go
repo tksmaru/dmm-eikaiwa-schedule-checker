@@ -42,10 +42,10 @@ type Message struct {
 	Text     string
 }
 
-func NewSlack(ctx context.Context, sender Sender) *Slack {
+func NewSlack(ctx context.Context) *Slack {
 	return &Slack{
 		Context: ctx,
-		post:    sender,
+		post:    send,
 	}
 }
 

@@ -15,7 +15,7 @@ func TestNewSlack_ShouldSucceed(t *testing.T) {
 	}
 	defer done()
 
-	s := NewSlack(ctx, send)
+	s := NewSlack(ctx)
 
 	if s.Context == nil {
 		t.Fatalf("slack should contain context. actual: %v", s)
@@ -101,7 +101,8 @@ func TestSlack_Send_ShouldFail_WithSendError(t *testing.T) {
 
 	m := createDefaultMessage()
 
-	res, err := NewSlack(ctx, mockErrorSend).Send(m)
+	sl := &Slack{ctx, mockErrorSend}
+	res, err := sl.Send(m)
 	if res != nil {
 		t.Fatalf("Slack_Send should return nil when send fails. actual: %v", res)
 	}
@@ -126,7 +127,8 @@ func TestSlack_Send_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 
 	m := createDefaultMessage()
 
-	b, err := NewSlack(ctx, mockSuccessSend).Send(m)
+	sl := &Slack{ctx, mockSuccessSend}
+	b, err := sl.Send(m)
 	if err != nil {
 		t.Fatalf("Slack_Send should succeed without any arrors. actual: %v", err.Error())
 	}
