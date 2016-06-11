@@ -174,7 +174,6 @@ func TestScraper_GetInfoAsync_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 	go sc.GetInfoAsync(c, "any")
 	te := <-c
 
-
 	if te.err != nil {
 		t.Fatalf("Scraper_GetInfoAsync should succeed. actual: %v", te.err.Error())
 	}
