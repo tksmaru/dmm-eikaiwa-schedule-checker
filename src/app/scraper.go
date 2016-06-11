@@ -7,6 +7,7 @@ import (
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/urlfetch"
 	"io"
+	"net/http"
 	"regexp"
 	"time"
 )
@@ -69,6 +70,17 @@ func get(ctx context.Context, url string) (io.ReadCloser, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("urlfetch failed. url: %s, context: %v", url, err.Error())
+	}
+	// Probably this code is not necessary.
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, fmt.Errorf("request failed. url: %v, status code: %v", url, resp.StatusCode)
+	}
+	// DMM Eikaiwa redirects to top page if url not exists.
+	if url != resp.Request.URL.String() {
+		defer resp.Body.Close()
+		return nil, fmt.Errorf("request redirected to other page.\nexpected: %s\nactual: %s",
+			url, resp.Request.URL.String())
 	}
 	return resp.Body, nil
 }
