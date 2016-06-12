@@ -62,11 +62,12 @@ func send(ctx context.Context, m *Message) ([]byte, error) {
 
 	client := urlfetch.Client(ctx)
 	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
-	defer res.Body.Close()
 	if err != nil {
 		err = fmt.Errorf("notification send failed. context: %v", err.Error())
 		return nil, err
 	}
+	defer res.Body.Close()
+
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		err = fmt.Errorf("response read failure. context: %v", err.Error())
