@@ -35,7 +35,7 @@ func TestFetcherImpl_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
 	}
 }
 
-func TestFetch_ShouldFail_WhenSyntaxError(t *testing.T) {
+func TestFetcherImpl_ShouldFail_WhenSyntaxError(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestFetch_ShouldFail_WhenSyntaxError(t *testing.T) {
 	}
 }
 
-func TestFetch_ShouldFail_WhenPageNotExists(t *testing.T) {
+func TestFetcherImpl_ShouldFail_WhenPageNotExists(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestFetch_ShouldFail_WhenPageNotExists(t *testing.T) {
 	}
 }
 
-func TestFetch_ShouldFail_WhenPageNotExistsOnDMM(t *testing.T) {
+func TestFetcherImpl_ShouldFail_WhenPageNotExistsOnDMM(t *testing.T) {
 	ctx, done, err := aetest.NewContext()
 	if err != nil {
 		t.Fatal(err)
