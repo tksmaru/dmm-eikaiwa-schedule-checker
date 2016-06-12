@@ -233,9 +233,9 @@ func createTeacherInfo() *TeacherInfo {
 	t := &TeacherInfo{}
 	t.Teacher = Teacher{
 		Id:      "any",
-		Name:    "Jelo（ジェロ）",
+		Name:    "Test_Teacher（テスト）",
 		PageUrl: "http://eikaiwa.dmm.com/teacher/index/any/",
-		IconUrl: "http://image.eikaiwa.dmm.com/teacher/11002/1_201604151625.jpg",
+		IconUrl: "http://image.eikaiwa.dmm.com/teacher/test_id/1_201604151625.jpg",
 	}
 	t.Lessons = Lessons{
 		TeacherId: "any",
