@@ -136,13 +136,13 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 	message, err := ComposeMessage(ctx, inf)
 	if err != nil {
-		log.Errorf(ctx, "[%s] message compose error. context: %v", inf.Id, err.Error())
+		log.Errorf(ctx, "[%s] message compose error. context: %s", inf.Id, err.Error())
 		return
 	}
 
 	b, err := NewSlack(ctx).Send(message)
 	if err != nil {
-		log.Errorf(ctx, "[%s] slack notification error. context: %v", inf.Id, err.Error())
+		log.Errorf(ctx, "[%s] slack notification error. context: %s", inf.Id, err.Error())
 		return
 	}
 	log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
