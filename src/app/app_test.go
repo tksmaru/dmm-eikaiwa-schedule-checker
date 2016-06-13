@@ -23,14 +23,37 @@ func TestInformation_FormattedTime_ShouldSucceed_WithoutAnyErrors(t *testing.T) 
 }
 
 func TestSendMail_ShouldSucceed_WithoutAnyErrors(t *testing.T) {
+	ctx, done, err := aetest.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+
 	reset := setTestEnv("mail_send_to", "hoge@example.com")
 	defer reset()
 
 	t.Log(os.Getenv("mail_send_to"))
 
-	ctx, _, _ := aetest.NewContext()
+	err = sendMail(ctx, getSliceOfInformation())
+	if err != nil {
+		t.Fatal("sendMail should succeed. actual: %s", err.Error())
+	}
+}
 
-	sendMail(ctx, getSliceOfInformation())
+func TestSendMail_ShouldFail_WhenToNotSet(t *testing.T) {
+	ctx, done, err := aetest.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done()
+
+	t.Log(os.Getenv("mail_send_to"))
+
+	err = sendMail(ctx, getSliceOfInformation())
+	expected := "failed to compose e-mail message. context: Invalid ENV value. to: "
+	if err.Error() != expected {
+		t.Fatal("expected %s, but %s", expected, err.Error())
+	}
 }
 
 // test helper

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
@@ -76,7 +77,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			mailContents = append(mailContents, inf)
 		}
 		if len(mailContents) != 0 {
-			sendMail(ctx, mailContents)
+			if err := sendMail(ctx, mailContents); err != nil {
+				log.Errorf(ctx, "send mail failed. context: %s", err.Error())
+			}
 		}
 	}
 }
@@ -145,15 +148,12 @@ func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 	log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
 }
 
-func sendMail(ctx context.Context, contents []Information) {
+func sendMail(ctx context.Context, contents []Information) error {
 
 	msg, err := ComposeMail(ctx, contents)
 	if err != nil {
-		log.Errorf(ctx, "failed to compose e-mail message. context: %v", err.Error())
-		return
+		return fmt.Errorf("failed to compose e-mail message. context: %s", err.Error())
 	}
 
-	if err := NewMail(ctx).Send(msg); err != nil {
-		log.Errorf(ctx, "Couldn't send email: %v", err)
-	}
+	return NewMail(ctx).Send(msg)
 }
