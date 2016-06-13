@@ -2,60 +2,16 @@ package app
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
-
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/mail"
-	"google.golang.org/appengine/urlfetch"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
-
-const (
-	maxDays = 2
-	form    = "2006-01-02 15:04:05"
-	infForm = "2006-01-02(Mon) 15:04:05"
-)
-
-type Teacher struct {
-	Id      string
-	Name    string
-	PageUrl string
-	IconUrl string
-}
-
-// DB
-type Lessons struct {
-	TeacherId string
-	List      []time.Time
-	Updated   time.Time
-}
-
-func (l *Lessons) GetNotifiableLessons(previous []time.Time) []time.Time {
-	notifiable := []time.Time{}
-	for _, nowTime := range l.List {
-		var notify = true
-		for _, prevTime := range previous {
-			if nowTime.Equal(prevTime) {
-				notify = false
-				break
-			}
-		}
-		if notify {
-			notifiable = append(notifiable, nowTime)
-		}
-	}
-	return notifiable
-}
 
 // Noti
 type Information struct {
@@ -121,7 +77,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			mailContents = append(mailContents, inf)
 		}
 		if len(mailContents) != 0 {
-			sendMail(ctx, mailContents)
+			if err := sendMail(ctx, mailContents); err != nil {
+				log.Errorf(ctx, "send mail failed. context: %s", err.Error())
+			}
 		}
 	}
 }
@@ -130,8 +88,8 @@ func search(iChan chan Information, ctx context.Context, id string) {
 
 	inf := Information{}
 
-	c := make(chan TeacherInfo)
-	go getInfo(c, ctx, id)
+	c := make(chan TeacherInfoError)
+	go NewScraper(ctx).GetInfoAsync(c, id)
 	t := <-c
 
 	if t.err != nil {
@@ -172,156 +130,30 @@ func search(iChan chan Information, ctx context.Context, id string) {
 	}
 }
 
-type TeacherInfo struct {
-	Teacher
-	Lessons
-	err error
-}
-
-func getInfo(c chan TeacherInfo, ctx context.Context, id string) {
-
-	var t TeacherInfo
-
-	client := urlfetch.Client(ctx)
-	url := fmt.Sprintf("http://eikaiwa.dmm.com/teacher/index/%s/", id)
-
-	resp, err := client.Get(url)
-	if err != nil {
-		t.err = fmt.Errorf("[%s] urlfetch failed. url: %s, context: %v", id, url, err)
-		c <- t
-		return
-	}
-
-	doc, _ := goquery.NewDocumentFromResponse(resp)
-	if err != nil {
-		t.err = fmt.Errorf("[%s] document creation failed. url: %s, context: %v", id, url, err)
-		c <- t
-		return
-	}
-
-	name := doc.Find("h1").Last().Text()
-
-	image, _ := doc.Find(".profile-pic").First().Attr("src")
-
-	available := []time.Time{}
-	// yyyy-mm-dd HH:MM:ss
-	re := regexp.MustCompile("[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[03]0:00")
-
-	doc.Find(".oneday").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		// 直近のmaxDays日分の予約可能情報を対象とする
-		if i >= maxDays {
-			return false
-		}
-		log.Debugf(ctx, "[%s] i = %v : %v", id, i, s.Find(".date").Text())
-
-		s.Find(".bt-open").Each(func(_ int, s *goquery.Selection) {
-
-			s2, _ := s.Attr("id") // 受講可能時刻
-			dateString := re.FindString(s2)
-
-			day, _ := time.ParseInLocation(form, dateString, time.FixedZone("Asia/Tokyo", 9*60*60))
-			log.Debugf(ctx, "[%s] parsed date: %v", id, day)
-
-			available = append(available, day)
-		})
-		return true
-	})
-
-	t.Teacher = Teacher{
-		Id:      id,
-		Name:    name,
-		PageUrl: url,
-		IconUrl: image,
-	}
-	t.Lessons = Lessons{
-		TeacherId: id,
-		List:      available,
-		Updated:   time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)),
-	}
-	log.Debugf(ctx, "[%s] scraped data. Teacher: %v, Lessons: %v", id, t.Teacher, t.Lessons)
-	c <- t
-}
-
 func postToSlack(ctx context.Context, inf Information, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	token := os.Getenv("slack_token")
-	if token == "" {
-		log.Errorf(ctx, "invalid ENV value. slack_token: %v", token)
-		return
-	}
-	channel := os.Getenv("slack_channel")
-	if channel == "" {
-		log.Infof(ctx, "Invalid ENV value. Default value '#general' is set. channel: %v", channel)
-		channel = "#general"
-	}
-
-	values := url.Values{}
-	values.Add("token", token)
-	values.Add("channel", channel)
-	values.Add("as_user", "false")
-	values.Add("username", fmt.Sprintf("%s from DMM Eikaiwa", inf.Name))
-	values.Add("icon_url", inf.IconUrl)
-	values.Add("text", fmt.Sprintf(messageFormat, strings.Join(inf.FormattedTime(infForm), "\n"), inf.PageUrl))
-
-	client := urlfetch.Client(ctx)
-	res, err := client.PostForm("https://slack.com/api/chat.postMessage", values)
+	message, err := ComposeMessage(ctx, inf)
 	if err != nil {
-		log.Debugf(ctx, "[%s] notification send failed. context: %v", inf.Id, err)
-	}
-	defer res.Body.Close()
-
-	b, err := ioutil.ReadAll(res.Body)
-	if err == nil {
-		log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
-	}
-}
-
-func sendMail(ctx context.Context, contents []Information) {
-
-	sender := os.Getenv("mail_sender")
-	if sender == "" {
-		sender = fmt.Sprintf("anything@%s.appspotmail.com", appengine.AppID(ctx))
-		log.Infof(ctx, "ENV value sender is not set. Default value '%s' is used.", sender)
-	}
-	to := os.Getenv("mail_send_to")
-	if to == "" {
-		log.Errorf(ctx, "Invalid ENV value. to: %v", to)
+		log.Errorf(ctx, "[%s] message compose error. context: %s", inf.Id, err.Error())
 		return
 	}
 
-	body := []string{}
-	for _, inf := range contents {
-		body = append(body, fmt.Sprintf(mailFormat,
-			inf.Name,
-			strings.Join(inf.FormattedTime(infForm), "\n"),
-			inf.PageUrl))
+	b, err := NewSlack(ctx).Send(message)
+	if err != nil {
+		log.Errorf(ctx, "[%s] slack notification error. context: %s", inf.Id, err.Error())
+		return
 	}
-
-	msg := &mail.Message{
-		Sender:  fmt.Sprintf("DMM Eikaiwa schedule checker <%s>", sender),
-		To:      []string{to},
-		Subject: "[DMM Eikaiwa] upcoming schedule",
-		Body:    fmt.Sprint(strings.Join(body, "\n")),
-	}
-	log.Debugf(ctx, "mail message: %v", msg)
-	if err := mail.Send(ctx, msg); err != nil {
-		log.Errorf(ctx, "Couldn't send email: %v", err)
-	}
+	log.Debugf(ctx, "[%s] slack response: %v", inf.Id, string(b))
 }
 
-const messageFormat = `
-Hi, you can take a lesson below!
-%s
+func sendMail(ctx context.Context, contents []Information) error {
 
-Access to <%s>
-`
+	msg, err := ComposeMail(ctx, contents)
+	if err != nil {
+		return fmt.Errorf("failed to compose e-mail message. context: %s", err.Error())
+	}
 
-const mailFormat = `
-Teacher: %s
-%s
-
-Access to %s
--------------------------
-`
+	return NewMail(ctx).Send(msg)
+}
