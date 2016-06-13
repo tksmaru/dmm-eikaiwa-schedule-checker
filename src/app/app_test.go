@@ -57,6 +57,7 @@ func TestSendMail_ShouldFail_WhenToNotSet(t *testing.T) {
 }
 
 // test helper
+
 func setTestEnv(key, val string) func() {
 	preVal := os.Getenv(key)
 	os.Setenv(key, val)
