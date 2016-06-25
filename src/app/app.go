@@ -102,8 +102,8 @@ func search(iChan chan Information, ctx context.Context, id string) {
 
 	var prev Lessons
 	if err := datastore.Get(ctx, key, &prev); err != nil {
-		// Entityが空の場合は見逃す
-		if err.Error() != "datastore: no such entity" {
+		// Entity is empty on first operation.
+		if err.Error() != datastore.ErrNoSuchEntity.Error() {
 			log.Errorf(ctx, "[%s] datastore get operation failed: context: %v", id, err)
 			iChan <- inf
 			return
